@@ -27,9 +27,9 @@ joint_idx_list = range(num_act)
 
 while True:
     target_position = random.random() * (limit_upper - limit_lower) + limit_lower
-    target_position_array = np.random.rand(num_act) * (limit_upper - limit_lower) + limit_lower * np.ones(num_act)
-    # p.setJointMotorControl2(robot_id, 0, p.POSITION_CONTROL, target_position)
-    p.setJointMotorControlArray(robot_id, joint_idx_list, p.POSITION_CONTROL, target_position_array)
+    # target_position_array = np.random.rand(num_act) * (limit_upper - limit_lower) + limit_lower * np.ones(num_act)
+    p.setJointMotorControl2(robot_id, 2, p.POSITION_CONTROL, target_position)
+    # p.setJointMotorControlArray(robot_id, joint_idx_list, p.POSITION_CONTROL, target_position_array)
     for _ in range(100):
         p.stepSimulation()
     print("Target position: {}. Current position: {}.".format(target_position, p.getJointState(robot_id, 0)[0]))

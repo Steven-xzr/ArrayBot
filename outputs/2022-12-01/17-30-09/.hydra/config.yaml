@@ -1,0 +1,8 @@
+robot:
+  gui: true
+  plane:
+    path: plane.urdf
+    position:
+    - 0
+    - 0
+    - -0.3
