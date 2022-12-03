@@ -12,9 +12,9 @@ from enum import Enum
 
 
 class Action(Enum):
-    DOWN = -1
+    DOWN = -0.001
     STOP = 0
-    UP = 1
+    UP = 0.001
 
 
 class TableBot:
@@ -28,7 +28,7 @@ class TableBot:
         current_dir = os.path.dirname(os.path.realpath(__file__))
         p.loadURDF(cfg.plane.path, cfg.plane.position, useFixedBase=True)
         self.robot_id = p.loadURDF(osp.join(current_dir, cfg.tablebot.path), cfg.tablebot.position, useFixedBase=True)
-        # p.resetBasePositionAndOrientation(self.robot_id, [0, 0, 0], [0, 0, 0, 1])
+        p.setGravity(0, 0, -10)
 
         self.num_act = p.getNumJoints(self.robot_id)
         self.num_side = int(math.sqrt(self.num_act))
@@ -94,10 +94,12 @@ class TableBot:
 
     def set_states(self, target_position: np.array, steps=100):
         current_position, _ = self.get_states()
+        # interpolate intermediate positions so that the robot moves smoothly
         for t in range(steps):
             position = current_position + (target_position - current_position) * (t + 1) / steps
             list_position = self.array2list(position)
             p.setJointMotorControlArray(self.robot_id, range(self.num_act), p.POSITION_CONTROL, targetPositions=list_position)
+            # p.stepSimulation() for 100 times leads to an error < 1e-6 meter
             for _ in range(100):
                 p.stepSimulation()
 
@@ -106,7 +108,8 @@ class TableBot:
         self.set_states(target_position)
         return target_position
 
-
+    def take_actions(self, actions: np.array):
+        raise NotImplementedError
 
 
 @hydra.main(config_path='config', config_name='demo')
@@ -117,6 +120,17 @@ def main(cfg):
     # list_obj[1] = 1
     # array_obj = robot.list2array(list_obj)
     # list_obj_ = robot.array2list(array_obj)
+
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    p.loadURDF(osp.join(current_dir, cfg.object.path), cfg.object.position)
+    for _ in range(100):
+        p.stepSimulation()
+
+    rgb, depth = robot.get_observations()
+    plt.imshow(rgb)
+    plt.show()
+    plt.imshow(depth)
+    plt.show()
 
     target = robot.set_random_states()
     now = robot.get_states()[0]
