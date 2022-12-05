@@ -18,4 +18,4 @@ camera:
   far: 1
 object:
   path: "urdf/box.urdf"
-  position: [0.08, 0.08, 0.08]
+  position: [0.03, 0.08, 0.08]

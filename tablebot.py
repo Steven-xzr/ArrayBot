@@ -8,13 +8,9 @@ import numpy as np
 import os
 import os.path as osp
 import matplotlib.pyplot as plt
-from enum import Enum
+import warnings
 
-
-class Action(Enum):
-    DOWN = -0.001
-    STOP = 0
-    UP = 0.001
+from policy.hand_crafted import HandCraftedAgent
 
 
 class TableBot:
@@ -79,9 +75,13 @@ class TableBot:
                 list_obj[self.corr2idx([x, y])] = array_obj[x, y]
         return list_obj.tolist()
 
-    def get_observations(self):
+    def get_observations(self, with_gt_mask=False):
         width, height, rgb, depth, mask = p.getCameraImage(self.width, self.height, self.view_matrix, self.proj_matrix)
-        return rgb, depth
+        if with_gt_mask:
+            warnings.warn("Acquiring ground-truth information!")
+            return rgb, depth, mask
+        else:
+            return rgb, depth
 
     def get_states(self):
         position = []
@@ -112,7 +112,7 @@ class TableBot:
         raise NotImplementedError
 
 
-@hydra.main(config_path='config', config_name='demo')
+@hydra.main(version_base=None, config_path='config', config_name='demo')
 def main(cfg):
     robot = TableBot(cfg)
 
@@ -125,22 +125,29 @@ def main(cfg):
     p.loadURDF(osp.join(current_dir, cfg.object.path), cfg.object.position)
     for _ in range(100):
         p.stepSimulation()
+    #
+    # rgb, depth, mask = robot.get_observations(with_gt_mask=True)
+    # plt.imshow(rgb)
+    # plt.show()
+    # plt.imshow(depth)
+    # plt.show()
+    # plt.imshow(mask)
+    # plt.show()
+    #
+    # target = robot.set_random_states()
+    # now = robot.get_states()[0]
+    # print(now - target)
+    #
+    # rgb, depth, mask = robot.get_observations(with_gt_mask=True)
+    # plt.imshow(rgb)
+    # plt.show()
+    # plt.imshow(depth)
+    # plt.show()
+    # plt.imshow(mask)
+    # plt.show()
 
-    rgb, depth = robot.get_observations()
-    plt.imshow(rgb)
-    plt.show()
-    plt.imshow(depth)
-    plt.show()
-
-    target = robot.set_random_states()
-    now = robot.get_states()[0]
-    print(now - target)
-
-    rgb, depth = robot.get_observations()
-    plt.imshow(rgb)
-    plt.show()
-    plt.imshow(depth)
-    plt.show()
+    agent = HandCraftedAgent(robot)
+    agent.make_wave(robot.limit_upper)
 
 
 if __name__ == '__main__':
