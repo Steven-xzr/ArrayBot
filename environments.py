@@ -60,7 +60,8 @@ class LiftBlockEnv(BaseEnv):
 
     def get_reward(self):
         object_position, _ = p.getBasePositionAndOrientation(self.object_id)
-        object_height = object_position[2]
-        reward = object_height - (self.robot.limit_lower + self.robot.limit_upper) / 2
+        object_height = object_position[2] - 0.02
+        # normalize the reward to [-1, 1]
+        reward = 2 * (object_height - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
         return reward
 

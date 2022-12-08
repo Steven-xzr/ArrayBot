@@ -12,7 +12,8 @@ def main(cfg):
 
     for _ in range(1000):
         action = np.random.randint(-1, 2, [env.robot.num_side, env.robot.num_side])
-        env.step(action)
+        _, reward, _, _ = env.step(action)
+        print(reward)
 
 
 if __name__ == '__main__':
