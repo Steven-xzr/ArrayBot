@@ -10,8 +10,6 @@ import os.path as osp
 import matplotlib.pyplot as plt
 import warnings
 
-from policy.hand_crafted import HandCraftedAgent
-
 
 class TableBot:
     def __init__(self, cfg):
@@ -67,7 +65,7 @@ class TableBot:
             array_obj[x, y] = obj
         return array_obj
 
-    def array2list(self, array_obj: np.array):
+    def array2list(self, array_obj: np.ndarray):
         assert array_obj.shape == (self.num_side, self.num_side)
         list_obj = np.empty(self.num_act)
         for x in range(self.num_side):
@@ -75,7 +73,7 @@ class TableBot:
                 list_obj[self.corr2idx([x, y])] = array_obj[x, y]
         return list_obj.tolist()
 
-    def get_observations(self, with_gt_mask=False):
+    def get_images(self, with_gt_mask=False):
         width, height, rgb, depth, mask = p.getCameraImage(self.width, self.height, self.view_matrix, self.proj_matrix)
         if with_gt_mask:
             warnings.warn("Acquiring ground-truth information!")
@@ -92,15 +90,19 @@ class TableBot:
             velocity.append(s[1])
         return self.list2array(position), self.list2array(velocity)
 
-    def set_states(self, target_position: np.array, steps=100):
+    def set_states(self, target_position: np.ndarray, interp_steps=100, sim_steps=100):
+        assert target_position.shape == (self.num_side, self.num_side)
+        # consider the joint limits
+        target_position = np.clip(target_position, self.limit_lower, self.limit_upper)
+
         current_position, _ = self.get_states()
         # interpolate intermediate positions so that the robot moves smoothly
-        for t in range(steps):
-            position = current_position + (target_position - current_position) * (t + 1) / steps
+        for t in range(interp_steps):
+            position = current_position + (target_position - current_position) * (t + 1) / interp_steps
             list_position = self.array2list(position)
             p.setJointMotorControlArray(self.robot_id, range(self.num_act), p.POSITION_CONTROL, targetPositions=list_position)
             # p.stepSimulation() for 100 times leads to an error < 1e-6 meter
-            for _ in range(100):
+            for _ in range(sim_steps):
                 p.stepSimulation()
 
     def set_random_states(self):
@@ -108,8 +110,18 @@ class TableBot:
         self.set_states(target_position)
         return target_position
 
-    def take_actions(self, actions: np.array):
-        raise NotImplementedError
+    def reset(self):
+        target_position = np.ones([self.num_side, self.num_side]) * (self.limit_lower + self.limit_upper) / 2
+        self.set_states(target_position)
+
+    def take_action(self, action: np.ndarray):
+        """
+        The elements of action should be 1 for UP, 0 for NOOP, -1 for DOWN
+        """
+        assert action.shape == (self.num_side, self.num_side)
+        current_position, _ = self.get_states()
+        target_position = current_position + action * 0.001
+        self.set_states(target_position, interp_steps=10, sim_steps=10)
 
 
 @hydra.main(version_base=None, config_path='config', config_name='demo')
@@ -145,9 +157,9 @@ def main(cfg):
     # plt.show()
     # plt.imshow(mask)
     # plt.show()
-
-    agent = HandCraftedAgent(robot)
-    agent.make_wave(robot.limit_upper)
+    #
+    # agent = HandCraftedAgent(robot)
+    # agent.make_wave(robot.limit_upper / 3)
 
 
 if __name__ == '__main__':
