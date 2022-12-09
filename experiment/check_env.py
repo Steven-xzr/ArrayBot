@@ -12,7 +12,7 @@ def main(cfg):
 
     for _ in range(1000):
         action = np.random.randint(-1, 2, [env.robot.num_side, env.robot.num_side])
-        _, reward, _, _ = env.step(action)
+        obs, reward, done, info = env.step(action)
         print(reward)
 
 

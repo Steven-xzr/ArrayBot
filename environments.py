@@ -16,7 +16,10 @@ class BaseEnv:
         self.reset()
 
     def get_obs(self):
-        # TODO: handlers for object_orientation & joint_velocity
+        # TODO: handlers for object_orientation & joint_velocity (currently not used)
+        """
+        All positions and pixel values are normalized to [0, 1]
+        """
         def norm_obj_pos(obj_pos: list):
             x = obj_pos[0] / self.robot.table_size
             y = obj_pos[1] / self.robot.table_size
