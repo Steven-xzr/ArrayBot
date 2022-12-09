@@ -16,21 +16,21 @@ class BaseEnv:
         self.reset()
 
     def get_obs(self):
-        # TODO: handlers for object_orientation & joint_velocity (currently not used)
+        # Warning: lacking handlers for object_orientation & joint_velocity (currently not used)
         """
-        All positions and pixel values are normalized to [0, 1]
+        All positions and pixel values are normalized to [-1, 1]
         """
         def norm_obj_pos(obj_pos: list):
-            x = obj_pos[0] / self.robot.table_size
-            y = obj_pos[1] / self.robot.table_size
-            z = (obj_pos[2] - 0.01 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower)
+            x = 2 * obj_pos[0] / self.robot.table_size - 1
+            y = 2 * obj_pos[1] / self.robot.table_size - 1
+            z = 2 * (obj_pos[2] - 0.01 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
             return np.array([x, y, z])
 
         def norm_image(image: np.ndarray):
-            return (image - np.amin(image)) / (np.amax(image) - np.amin(image))
+            return 2 * (image - np.amin(image)) / (np.amax(image) - np.amin(image)) - 1
 
         def norm_joint_pos(joint_pos: np.ndarray):
-            return (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower)
+            return 2 * (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
 
         object_position, object_orientation = p.getBasePositionAndOrientation(self.object_id)
         rgb, depth = self.robot.get_images()
