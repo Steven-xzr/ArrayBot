@@ -123,15 +123,15 @@ class TableBot:
         target_position = current_position + action * 0.001
         self.set_states(target_position, interp_steps=10, sim_steps=10)
 
-    def regularization(self, option='height', action=None):
-        if option == 'height':
+    def regularization(self, mode='height', action=None):
+        if mode == 'height':
             # regularize the sum of the heights of the joints
             current_position, _ = self.get_states()
-            return np.sum(current_position) - self.num_act * (self.limit_lower + self.limit_upper) / 2
-        elif option == 'motion':
+            return np.sum(current_position) / self.num_act - (self.limit_lower + self.limit_upper) / 2
+        elif mode == 'motion':
             # regularize the motion of the action
             assert action is not None
-            return np.sum(np.absolute(action))
+            return np.sum(np.absolute(action)) / self.num_act
         else:
             raise ValueError("Unknown regularization option!")
 

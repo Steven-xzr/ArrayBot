@@ -16,11 +16,28 @@ class BaseEnv:
         self.reset()
 
     def get_obs(self):
+        # TODO: handlers for object_orientation & joint_velocity
+        def norm_obj_pos(obj_pos: list):
+            x = obj_pos[0] / self.robot.table_size
+            y = obj_pos[1] / self.robot.table_size
+            z = (obj_pos[2] - 0.01 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower)
+            return np.array([x, y, z])
+
+        def norm_image(image: np.ndarray):
+            return (image - np.amin(image)) / (np.amax(image) - np.amin(image))
+
+        def norm_joint_pos(joint_pos: np.ndarray):
+            return (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower)
+
+        object_position, object_orientation = p.getBasePositionAndOrientation(self.object_id)
         rgb, depth = self.robot.get_images()
         joint_position, joint_velocity = self.robot.get_states()
-        return {'rgb': rgb, 'depth': depth, 'joint_position': joint_position, 'joint_velocity': joint_velocity}
 
-    def get_reward(self):
+        return {'object_position': norm_obj_pos(object_position), 'object_orientation': np.array(object_orientation),
+                'rgb': norm_image(rgb), 'depth': norm_image(depth),
+                'joint_position': norm_joint_pos(joint_position), 'joint_velocity': joint_velocity}
+
+    def get_reward(self, action: np.ndarray):
         raise NotImplementedError
 
     def is_done(self):
@@ -49,19 +66,22 @@ class BaseEnv:
         """
         self.robot.take_action(action)
         obs = self.get_obs()
-        reward = self.get_reward()
+        reward = self.get_reward(action)
         done = self.is_done()
         return obs, reward, done, {}
 
 
-class LiftBlockEnv(BaseEnv):
+class LiftEnv(BaseEnv):
     def __init__(self, cfg):
-        super(LiftBlockEnv, self).__init__(cfg)
+        super(LiftEnv, self).__init__(cfg)
 
-    def get_reward(self):
+    def get_reward(self, action):
         object_position, _ = p.getBasePositionAndOrientation(self.object_id)
-        object_height = object_position[2] - 0.02
+        object_height = object_position[2] - 0.01
         # normalize the reward to [-1, 1]
         reward = 2 * (object_height - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+        if self.cfg.reward.regularization:
+            regularization = self.cfg.reward.coefficient * self.robot.regularization(self.cfg.reward.mode, action)
+            return reward - regularization
         return reward
 

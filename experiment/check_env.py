@@ -2,12 +2,12 @@ import hydra
 import numpy as np
 import os
 
-from environments import LiftBlockEnv
+from environments import LiftEnv
 
 
-@hydra.main(version_base=None, config_path='config', config_name='lift_block')
+@hydra.main(version_base=None, config_path='config', config_name='lift_ball')
 def main(cfg):
-    env = LiftBlockEnv(cfg)
+    env = LiftEnv(cfg)
     env.reset()
 
     for _ in range(1000):

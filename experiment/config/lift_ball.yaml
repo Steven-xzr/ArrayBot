@@ -19,7 +19,7 @@ tablebot:
     far: 1
 
 object:
-  path: "urdf/box.urdf"
+  path: "urdf/ball.urdf"
   random_position: false
   position: [0.08, 0.08, 0.08]
 
