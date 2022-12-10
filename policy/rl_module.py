@@ -1,4 +1,3 @@
-import pfrl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,7 +7,7 @@ class PerceptionXYZ8(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
-        self.conv2 = nn.Conv2d(6, 64, 3, padding=1)
+        self.conv2 = nn.Conv2d(16, 64, 3, padding=1)
         self.conv3 = nn.Conv2d(64, 64, 2)
         self.fc1 = nn.Linear(3, 64)
         self.fc2 = nn.Linear(64, 64)
@@ -40,19 +39,11 @@ class PerceptionXYZ8(torch.nn.Module):
 class QFunction8(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.main = nn.Sequential(
-            # input is state_emb, going into a convolution
-            nn.ConvTranspose2d(256, 128, 2, 1, 0, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(True),
-            # state size. 128 x 2 x 2
-            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
-            # state size. 64 x 4 x 4
-            nn.ConvTranspose2d(64, 3, 4, 2, 1, bias=False),
-            # state size. 3 x 8 x 8
-        )
+        self.convT1 = nn.ConvTranspose2d(256, 128, 2, 1, 0)
+        self.bn1 = nn.BatchNorm2d(128)
+        self.convT2 = nn.ConvTranspose2d(128, 64, 4, 2, 1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.convT3 = nn.ConvTranspose2d(64, 3, 4, 2, 1)
 
     def forward(self, state_emb: torch.Tensor):
         """
@@ -63,4 +54,25 @@ class QFunction8(torch.nn.Module):
         Return:
             q: the Q value of each action, shape: [batch_size, dim_choice=3 (UP/NOOP/DOWN), num_side=8, num_side=8]
         """
-        return self.main(state_emb)
+        state_emb = state_emb.view(state_emb.shape[0], 256, 1, 1)
+        q = F.relu(self.bn1(self.convT1(state_emb)))    # 128 x 2 x 2
+        q = F.relu(self.bn2(self.convT2(q)))            # 64 x 4 x 4
+        q = self.convT3(q)                              # 3 x 8 x 8
+        return q
+
+
+def main():
+    p_net = PerceptionXYZ8()
+    q_net = QFunction8()
+
+    b = 100
+    obj = torch.rand(b, 3)
+    joint = torch.rand(b, 8, 8)
+    state_emb = p_net(obj, joint)
+    q_matrix = q_net(state_emb)
+
+    print(state_emb.shape, q_matrix.shape)
+
+
+if __name__ == '__main__':
+    main()
