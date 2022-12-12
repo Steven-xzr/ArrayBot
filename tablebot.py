@@ -90,7 +90,7 @@ class TableBot:
             velocity.append(s[1])
         return self.list2array(position), self.list2array(velocity)
 
-    def set_states(self, target_position: np.ndarray, interp_steps=100, sim_steps=100):
+    def set_states(self, target_position: np.ndarray, interp_steps=20, sim_steps=50):
         assert target_position.shape == (self.num_side, self.num_side)
         # consider the joint limits
         target_position = np.clip(target_position, self.limit_lower, self.limit_upper)

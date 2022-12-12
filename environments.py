@@ -3,19 +3,32 @@ import random
 import numpy as np
 import os
 import os.path as osp
+from abc import abstractmethod
+import gym
+import gym.spaces as spaces
 
 from tablebot import TableBot
 
 
-class BaseEnv:
+class BaseEnv(gym.Env):
+    DOWN = -1
+    NOOP = 0
+    UP = 1
+
     def __init__(self, cfg):
         self.cfg = cfg
         self.robot = TableBot(cfg.tablebot)
         current_dir = os.path.dirname(os.path.realpath(__file__))
         self.object_id = p.loadURDF(osp.join(current_dir, cfg.object.path), cfg.object.position)
         self.reset()
+        self.action_space = spaces.Box(low=-1, high=1, shape=(self.robot.num_side, self.robot.num_side), dtype=np.int8)
+        self.observation_space = spaces.Dict({
+            'object_position': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
+            'object_orientation': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
+            'joint_position': spaces.Box(low=-1, high=1, shape=(self.robot.num_side, self.robot.num_side), dtype=np.float32),
+        })
 
-    def get_obs(self):
+    def _get_obs(self):
         # Warning: lacking handlers for object_orientation & joint_velocity (currently not used)
         """
         All positions and pixel values are normalized to [-1, 1]
@@ -26,6 +39,10 @@ class BaseEnv:
             z = 2 * (obj_pos[2] - 0.01 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
             return np.array([x, y, z])
 
+        def norm_obj_euler(obj_euler: list):
+            euler = np.array(obj_euler)
+            return euler / np.pi
+
         def norm_image(image: np.ndarray):
             return 2 * (image - np.amin(image)) / (np.amax(image) - np.amin(image)) - 1
 
@@ -33,17 +50,23 @@ class BaseEnv:
             return 2 * (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
 
         object_position, object_orientation = p.getBasePositionAndOrientation(self.object_id)
+        object_orientation = p.getEulerFromQuaternion(object_orientation)
         rgb, depth = self.robot.get_images()
         joint_position, joint_velocity = self.robot.get_states()
 
-        return {'object_position': norm_obj_pos(object_position), 'object_orientation': np.array(object_orientation),
-                'rgb': norm_image(rgb), 'depth': norm_image(depth),
-                'joint_position': norm_joint_pos(joint_position), 'joint_velocity': joint_velocity}
+        return {
+            'object_position': norm_obj_pos(object_position),
+            'object_orientation': norm_obj_euler(object_orientation),
+            # 'rgb': norm_image(rgb), 'depth': norm_image(depth),
+            'joint_position': norm_joint_pos(joint_position),
+            # 'joint_velocity': joint_velocity
+        }
 
-    def get_reward(self, action: np.ndarray):
+    @abstractmethod
+    def _get_reward(self, action: np.ndarray):
         raise NotImplementedError
 
-    def is_done(self):
+    def _is_done(self):
         object_position, _ = p.getBasePositionAndOrientation(self.object_id)
         inside = 0 < object_position[0] < self.robot.table_size and 0 < object_position[1] < self.robot.table_size
         return not inside
@@ -61,24 +84,39 @@ class BaseEnv:
         p.resetBasePositionAndOrientation(self.object_id, object_corr, [0, 0, 0, 1])
         for _ in range(100):
             p.stepSimulation()
-        return self.get_obs()
+        return self._get_obs()
 
     def step(self, action: np.ndarray):
         """
         The elements of action should be 1 for UP, 0 for NOOP, -1 for DOWN
         """
         self.robot.take_action(action)
-        obs = self.get_obs()
-        reward = self.get_reward(action)
-        done = self.is_done()
+        obs = self._get_obs()
+        reward = self._get_reward(action)
+        done = self._is_done()
         return obs, reward, done, {}
+
+    # def sample_action(self):
+    #     return np.random.randint(-1, 2, [self.robot.num_side, self.robot.num_side])
+
+    def render(self, mode='rgb'):
+        """
+        Do not use the render function. Use the gui mode in pybullet instead.
+        """
+        print('Do not use the render function. Use the gui mode in pybullet instead.')
+        # if mode == 'rgb':
+        #     return self._get_obs()['rgb']
+        # elif mode == 'depth':
+        #     return self._get_obs()['depth']
+        # else:
+        #     raise NotImplementedError
 
 
 class LiftEnv(BaseEnv):
     def __init__(self, cfg):
         super(LiftEnv, self).__init__(cfg)
 
-    def get_reward(self, action):
+    def _get_reward(self, action):
         object_position, _ = p.getBasePositionAndOrientation(self.object_id)
         object_height = object_position[2] - 0.01
         # normalize the reward to [-1, 1]

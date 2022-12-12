@@ -36,7 +36,7 @@ class PerceptionXYZ8(torch.nn.Module):
         return state_emb
 
 
-class QFunction8(torch.nn.Module):
+class QValue8(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.convT1 = nn.ConvTranspose2d(256, 128, 2, 1, 0)
@@ -63,7 +63,7 @@ class QFunction8(torch.nn.Module):
 
 def main():
     p_net = PerceptionXYZ8()
-    q_net = QFunction8()
+    q_net = QValue8()
 
     b = 100
     obj = torch.rand(b, 3)
