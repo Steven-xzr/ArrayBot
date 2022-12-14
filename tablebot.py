@@ -131,6 +131,7 @@ class TableBot:
         elif mode == 'motion':
             # regularize the motion of the action
             assert action is not None
+            assert action.shape == (self.num_side, self.num_side) or action.shape == (self.num_act,)
             return np.sum(np.absolute(action)) / self.num_act
         else:
             raise ValueError("Unknown regularization option!")

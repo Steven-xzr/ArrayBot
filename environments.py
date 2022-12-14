@@ -11,9 +11,13 @@ from tablebot import TableBot
 
 
 class BaseEnv(gym.Env):
-    DOWN = -1
-    NOOP = 0
-    UP = 1
+    """
+    To fit the gym and RL framework api, action in the environment is in the shape of (num_act,).
+    However, the action in the robot is in the shape of (num_side, num_side).
+    """
+    DOWN = 0
+    NOOP = 1
+    UP = 2
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -21,7 +25,9 @@ class BaseEnv(gym.Env):
         current_dir = os.path.dirname(os.path.realpath(__file__))
         self.object_id = p.loadURDF(osp.join(current_dir, cfg.object.path), cfg.object.position)
         self.reset()
-        self.action_space = spaces.Box(low=-1, high=1, shape=(self.robot.num_side, self.robot.num_side), dtype=np.int8)
+        # self.action_space = spaces.Box(low=-1, high=1, shape=(self.robot.num_act,), dtype=np.int8)
+        # self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side, self.robot.num_side], dtype=np.int8) * 3)
+        self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side ** 2], dtype=np.int8) * 3)
         self.observation_space = spaces.Dict({
             'object_position': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
             'object_orientation': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
@@ -37,17 +43,19 @@ class BaseEnv(gym.Env):
             x = 2 * obj_pos[0] / self.robot.table_size - 1
             y = 2 * obj_pos[1] / self.robot.table_size - 1
             z = 2 * (obj_pos[2] - 0.01 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
-            return np.array([x, y, z])
+            return np.array([x, y, z]).astype(np.float32)
 
         def norm_obj_euler(obj_euler: list):
             euler = np.array(obj_euler)
-            return euler / np.pi
+            return (euler / np.pi).astype(np.float32)
 
         def norm_image(image: np.ndarray):
-            return 2 * (image - np.amin(image)) / (np.amax(image) - np.amin(image)) - 1
+            image = 2 * (image - np.amin(image)) / (np.amax(image) - np.amin(image)) - 1
+            return image.astype(np.float32)
 
         def norm_joint_pos(joint_pos: np.ndarray):
-            return 2 * (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+            pos = 2 * (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+            return pos.astype(np.float32)
 
         object_position, object_orientation = p.getBasePositionAndOrientation(self.object_id)
         object_orientation = p.getEulerFromQuaternion(object_orientation)
@@ -88,8 +96,12 @@ class BaseEnv(gym.Env):
 
     def step(self, action: np.ndarray):
         """
-        The elements of action should be 1 for UP, 0 for NOOP, -1 for DOWN
+        The elements of action should be 2 for UP, 1 for NOOP, 0 for DOWN
         """
+        assert action.shape == (self.robot.num_act,) or action.shape == (self.robot.num_side, self.robot.num_side)
+        if action.shape == (self.robot.num_act,):
+            action = action.reshape((self.robot.num_side, self.robot.num_side))
+        action = (action - 1).astype(np.int8)
         self.robot.take_action(action)
         obs = self._get_obs()
         reward = self._get_reward(action)

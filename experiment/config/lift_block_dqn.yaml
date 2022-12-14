@@ -1,6 +1,6 @@
 tablebot:
   robot:
-    gui: false
+    gui: true
     plane:
       path: "plane.urdf"
       position: [0, 0, -0.3]
@@ -26,5 +26,5 @@ object:
 reward:
   regularization: false
   mode: "height"  # "height" or "motion"
-  coefficient: 0.1
+  coefficient: 2  # larger coefficient means more regularization
 
