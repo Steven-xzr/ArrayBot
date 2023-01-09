@@ -114,13 +114,15 @@ class TableBot:
         target_position = np.ones([self.num_side, self.num_side]) * (self.limit_lower + self.limit_upper) / 2
         self.set_states(target_position)
 
-    def take_action(self, action: np.ndarray):
+    def take_action(self, action: np.ndarray, granularity=10):
         """
-        The elements of action should be 1 for UP, 0 for NOOP, -1 for DOWN
+        Args:
+            action: the elements of action should be 1 for UP, 0 for NOOP, -1 for DOWN
+            granularity: how many steps it takes to move from the bottom to the top
         """
         assert action.shape == (self.num_side, self.num_side)
         current_position, _ = self.get_states()
-        target_position = current_position + action * 0.001
+        target_position = current_position + (self.limit_upper - self.limit_lower) / granularity
         self.set_states(target_position, interp_steps=10, sim_steps=10)
 
     def regularization(self, mode='height', action=None):
