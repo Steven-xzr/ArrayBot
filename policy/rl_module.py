@@ -27,7 +27,9 @@ class PerceptionXYZ8(torch.nn.Module):
             state_emb: state embedding, shape: [batch_size, 256]
         """
         obj_height = obj[:, -1]
-        joint = joint - obj_height
+        # if obj.shape != torch.Size([1, 3]):
+        #     print('here')
+        joint = joint - obj_height.reshape(-1, 1, 1)
 
         obj = F.relu(self.fc1(obj))
         obj = F.relu(self.fc2(obj))
@@ -42,7 +44,7 @@ class PerceptionXYZ8(torch.nn.Module):
         return state_emb
 
 
-class QValue8(torch.nn.Module):
+class DeConv8(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.convT1 = nn.ConvTranspose2d(256, 128, 2, 1, 0)
@@ -53,12 +55,12 @@ class QValue8(torch.nn.Module):
 
     def forward(self, state_emb: torch.Tensor):
         """
-        Turn the state embedding into a Q-value matrix. Here, we adopt an image generation approach.
+        Turn the state embedding into a Q-value or action prob. matrix. Here, we adopt an image generation approach.
         REF: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
         Args:
             state_emb: the state embedding, shape: [batch_size, 256]
         Return:
-            q: the Q value of each action, shape: [batch_size, dim_choice=3 (UP/NOOP/DOWN), num_side=8, num_side=8]
+            q: the Q-value or action prob., shape: [batch_size, dim_choice=3 (UP/NOOP/DOWN), num_side=8, num_side=8]
         """
         state_emb = state_emb.view(state_emb.shape[0], 256, 1, 1)
         q = F.relu(self.bn1(self.convT1(state_emb)))    # 128 x 2 x 2
@@ -151,7 +153,7 @@ class MultiDiscreteActionValue(ActionValue):
 
 def main():
     p_net = PerceptionXYZ8()
-    q_net = QValue8()
+    q_net = DeConv8()
 
     b = 2
     obj = torch.rand(b, 3)

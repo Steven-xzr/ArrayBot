@@ -5,14 +5,14 @@ import torch
 import torch.nn as nn
 
 from environments import LiftEnv
-from policy.rl_module import PerceptionXYZ8, QValue8, MultiDiscreteActionValue
+from policy.rl_module import PerceptionXYZ8, DeConv8, MultiDiscreteActionValue
 
 
 class QFunction(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.p_net = PerceptionXYZ8()
-        self.q_net = QValue8()
+        self.q_net = DeConv8()
 
     def forward(self, x):
         object_position = x[0]
