@@ -63,7 +63,7 @@ def main(cfg):
             if done or reset:
                 break
         if i % 1 == 0:
-            print('episode:', i, 'R:', R)
+            print('episode:', i, 'R:', R / t)
         if i % 50 == 0:
             print('statistics:', agent.get_statistics())
     print('Finished.')

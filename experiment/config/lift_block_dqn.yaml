@@ -5,7 +5,7 @@ tablebot:
       path: "plane.urdf"
       position: [0, 0, -0.3]
     tablebot:
-      path: "urdf/tablebot_64.urdf"
+      path: "urdf/tablebot_64_slim.urdf"
       position: [0, 0, 0]
       act_size: 0.016
       act_gap: 0.001
@@ -26,5 +26,5 @@ object:
 reward:
   regularization: false
   mode: "height"  # "height" or "motion"
-  coefficient: 2  # larger coefficient means more regularization
+  coefficient: 100  # larger coefficient means more regularization
 

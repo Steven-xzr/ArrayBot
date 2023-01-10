@@ -42,7 +42,7 @@ class BaseEnv(gym.Env):
         def norm_obj_pos(obj_pos: list):
             x = 2 * obj_pos[0] / self.robot.table_size - 1
             y = 2 * obj_pos[1] / self.robot.table_size - 1
-            z = 2 * (obj_pos[2] - 0.01 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+            z = 2 * (obj_pos[2] - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
             return np.array([x, y, z]).astype(np.float32)
 
         def norm_obj_euler(obj_euler: list):

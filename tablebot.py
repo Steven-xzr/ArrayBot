@@ -122,7 +122,7 @@ class TableBot:
         """
         assert action.shape == (self.num_side, self.num_side)
         current_position, _ = self.get_states()
-        target_position = current_position + (self.limit_upper - self.limit_lower) / granularity
+        target_position = current_position + (self.limit_upper - self.limit_lower) / granularity * action
         self.set_states(target_position, interp_steps=10, sim_steps=10)
 
     def regularization(self, mode='height', action=None):

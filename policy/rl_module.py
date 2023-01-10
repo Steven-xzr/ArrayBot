@@ -26,6 +26,9 @@ class PerceptionXYZ8(torch.nn.Module):
         Returns:
             state_emb: state embedding, shape: [batch_size, 256]
         """
+        obj_height = obj[:, -1]
+        joint = joint - obj_height
+
         obj = F.relu(self.fc1(obj))
         obj = F.relu(self.fc2(obj))
 
