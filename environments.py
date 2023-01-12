@@ -4,6 +4,7 @@ import numpy as np
 import os
 import os.path as osp
 from abc import abstractmethod
+import warnings
 import gym
 import gym.spaces as spaces
 
@@ -115,7 +116,7 @@ class BaseEnv(gym.Env):
         """
         Do not use the render function. Use the gui mode in pybullet instead.
         """
-        print('Do not use the render function. Use the gui mode in pybullet instead.')
+        warnings.warn('Do not use the render function. Use the gui mode in pybullet instead.')
         # if mode == 'rgb':
         #     return self._get_obs()['rgb']
         # elif mode == 'depth':
@@ -138,3 +139,18 @@ class LiftEnv(BaseEnv):
             return reward - regularization
         return reward
 
+
+class RotateEnv(BaseEnv):
+    def __init__(self, cfg):
+        super(RotateEnv, self).__init__(cfg)
+        self.goal_ori = np.array([cfg.goal.row, cfg.goal.pitch, cfg.goal.yaw])
+
+    def _get_reward(self, action):
+        _, obj_ori = p.getBasePositionAndOrientation(self.object_id)
+        obj_ori = np.array(p.getEulerFromQuaternion(obj_ori))
+        # ori_diff = np.linalg.norm(obj_ori - self.goal_ori)
+        ori_diff = np.abs((obj_ori - self.goal_ori)[-1])
+        if self.cfg.reward.regularization:
+            regularization = self.cfg.reward.coefficient * self.robot.regularization(self.cfg.reward.mode, action)
+            return - ori_diff - regularization
+        return - ori_diff
