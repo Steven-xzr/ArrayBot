@@ -10,6 +10,7 @@ tablebot:
       act_size: 0.016
       act_gap: 0.001
       act_margin: 0.010
+      num_joint_per_act: 3
   camera:
     distance: 0.25
     fov: 60
@@ -24,11 +25,7 @@ object:
   position: [0.08, 0.08, 0.08]
 
 reward:
-  regularization: false
+  regularization: true
   mode: "height"  # "height" or "motion"
-  coefficient: 10  # larger coefficient means more regularization
+  coefficient: 2  # larger coefficient means more regularization
 
-goal:
-  row: 0
-  pitch: 0
-  yaw: 0.8

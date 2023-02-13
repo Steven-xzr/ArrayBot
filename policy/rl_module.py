@@ -29,7 +29,7 @@ class PerceptionXYZ8(torch.nn.Module):
         obj_height = obj[:, -1]
         # if obj.shape != torch.Size([1, 3]):
         #     print('here')
-        joint = joint - obj_height.reshape(-1, 1, 1)
+        # joint = joint - obj_height.reshape(-1, 1, 1)
 
         obj = F.relu(self.fc1(obj))
         obj = F.relu(self.fc2(obj))

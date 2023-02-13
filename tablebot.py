@@ -24,8 +24,12 @@ class TableBot:
         self.robot_id = p.loadURDF(osp.join(current_dir, cfg.tablebot.path), cfg.tablebot.position, useFixedBase=True)
         p.setGravity(0, 0, -10)
 
-        self.num_act = p.getNumJoints(self.robot_id)
+        # Every actuator consists of 3 joints (base -- box -- cylinder -- sphere) or 1 joint (base -- box)
+        self.num_joint_per_act = cfg.tablebot.num_joint_per_act
+        self.num_act = p.getNumJoints(self.robot_id) // self.num_joint_per_act
         self.num_side = int(math.sqrt(self.num_act))
+        self.joint_iter = range(0, self.num_act * self.num_joint_per_act, self.num_joint_per_act)
+
         joint_info = p.getJointInfo(self.robot_id, 0)
         self.limit_lower = joint_info[8]
         self.limit_upper = joint_info[9]
@@ -84,7 +88,7 @@ class TableBot:
     def get_states(self):
         position = []
         velocity = []
-        states = p.getJointStates(self.robot_id, range(self.num_act))
+        states = p.getJointStates(self.robot_id, self.joint_iter)
         for s in states:
             position.append(s[0])
             velocity.append(s[1])
@@ -100,7 +104,7 @@ class TableBot:
         for t in range(interp_steps):
             position = current_position + (target_position - current_position) * (t + 1) / interp_steps
             list_position = self.array2list(position)
-            p.setJointMotorControlArray(self.robot_id, range(self.num_act), p.POSITION_CONTROL, targetPositions=list_position)
+            p.setJointMotorControlArray(self.robot_id, self.joint_iter, p.POSITION_CONTROL, targetPositions=list_position)
             # p.stepSimulation() for 100 times leads to an error < 1e-6 meter
             for _ in range(sim_steps):
                 p.stepSimulation()
