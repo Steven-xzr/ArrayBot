@@ -8,7 +8,7 @@ from pfrl.policies import SoftmaxCategoricalHead
 
 
 class ActorCritic(torch.nn.Module):
-    def __init__(self, dim_obj=3, dim_freq=10):
+    def __init__(self, dim_obj=6, dim_freq=10):
         super().__init__()
         self.p_net = torch.nn.Sequential(
             torch.nn.Linear(dim_obj + dim_freq, 64),
@@ -32,8 +32,9 @@ class ActorCritic(torch.nn.Module):
 
     def forward(self, x):
         obj_pos = x[0]
-        freq = x[1]
-        state_emb = self.p_net(torch.cat([obj_pos, freq], dim=1))
+        obj_ori = x[1]
+        freq = x[2]
+        state_emb = self.p_net(torch.cat([obj_pos, obj_ori, freq], dim=1))
         a_prob = self.a_net(state_emb)
         v = self.v_net(state_emb)
         return tuple([self.head(a_prob), v])
@@ -52,7 +53,7 @@ def main(cfg):
         opt,
         gpu=0,
         update_interval=128,
-        phi=lambda x: (x['object_position'], env.dct_handler.dct(x['joint_position'])),
+        phi=lambda x: (x['object_position'], x['object_orientation'], env.dct_handler.dct(x['joint_position'])),
     )
 
     n_episodes = 300
