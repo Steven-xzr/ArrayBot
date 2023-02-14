@@ -1,5 +1,8 @@
-torch
-pybullet
+numpy
+scipy
+torch==1.13.0
+pybullet*
 hydra
-pfrl=0.3.0
-gym=0.22
+pfrl==0.3.0
+gym==0.21.0
+opencv-python==4.7.0
