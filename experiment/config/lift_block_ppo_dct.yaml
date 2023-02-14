@@ -1,6 +1,6 @@
 tablebot:
   robot:
-    gui: true
+    gui: false
     plane:
       path: "plane.urdf"
       position: [0, 0, -0.3]
@@ -19,13 +19,17 @@ tablebot:
     near: 0.1
     far: 1
 
+dct:
+  order: 4
+  step: 1.0
+
 object:
   path: "urdf/box.urdf"
   random_position: false
   position: [0.08, 0.08, 0.08]
 
 reward:
-  regularization: true
+  regularization: false
   mode: "height"  # "height" or "motion"
   coefficient: 2  # larger coefficient means more regularization
 

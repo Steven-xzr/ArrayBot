@@ -9,6 +9,7 @@ import gym
 import gym.spaces as spaces
 
 from tablebot import TableBot
+from dct_transform import DCT
 
 
 class BaseEnv(gym.Env):
@@ -26,14 +27,14 @@ class BaseEnv(gym.Env):
         current_dir = os.path.dirname(os.path.realpath(__file__))
         self.object_id = p.loadURDF(osp.join(current_dir, cfg.object.path), cfg.object.position)
         self.reset()
-        # self.action_space = spaces.Box(low=-1, high=1, shape=(self.robot.num_act,), dtype=np.int8)
-        # self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side, self.robot.num_side], dtype=np.int8) * 3)
-        self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side ** 2], dtype=np.int8) * 3)
         self.observation_space = spaces.Dict({
             'object_position': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
             'object_orientation': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
-            'joint_position': spaces.Box(low=-1, high=1, shape=(self.robot.num_side, self.robot.num_side), dtype=np.float32),
+            'joint_position': spaces.Box(low=-1, high=1, shape=(self.robot.num_side, self.robot.num_side),
+                                         dtype=np.float32),
         })
+        # self.action_space = spaces.Box(low=-1, high=1, shape=(self.robot.num_act,), dtype=np.int8)
+        # self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side, self.robot.num_side], dtype=np.int8) * 3)
 
     def _get_obs(self):
         # Warning: lacking handlers for object_orientation & joint_velocity (currently not used)
@@ -72,6 +73,10 @@ class BaseEnv(gym.Env):
         }
 
     @abstractmethod
+    def _take_action(self, action: np.ndarray):
+        raise NotImplementedError
+
+    @abstractmethod
     def _get_reward(self, action: np.ndarray):
         raise NotImplementedError
 
@@ -96,14 +101,7 @@ class BaseEnv(gym.Env):
         return self._get_obs()
 
     def step(self, action: np.ndarray):
-        """
-        The elements of action should be 2 for UP, 1 for NOOP, 0 for DOWN
-        """
-        assert action.shape == (self.robot.num_act,) or action.shape == (self.robot.num_side, self.robot.num_side)
-        if action.shape == (self.robot.num_act,):
-            action = action.reshape((self.robot.num_side, self.robot.num_side))
-        action = (action - 1).astype(np.int8)
-        self.robot.take_action(action)
+        self._take_action(action)
         obs = self._get_obs()
         reward = self._get_reward(action)
         done = self._is_done()
@@ -125,7 +123,57 @@ class BaseEnv(gym.Env):
         #     raise NotImplementedError
 
 
-class LiftEnv(BaseEnv):
+class BaseEnvSpatial(BaseEnv):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side ** 2], dtype=np.int8) * 3)
+
+    def _take_action(self, action: np.ndarray):
+        """
+        The elements of action should be 2 for UP, 1 for NOOP, 0 for DOWN
+        """
+        assert action.shape == (self.robot.num_act,) or action.shape == (self.robot.num_side, self.robot.num_side)
+        if action.shape == (self.robot.num_act,):
+            action = action.reshape((self.robot.num_side, self.robot.num_side))
+        action = (action - 1).astype(np.int8)
+        self.robot.take_action(action)
+
+    @abstractmethod
+    def _get_reward(self, action: np.ndarray):
+        raise NotImplementedError
+
+
+class BaseEnvDCT(BaseEnv):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.dct_handler = DCT(cfg.dct.order)
+        self.dct_step = cfg.dct.step
+        self.action_space = spaces.Discrete(self.dct_handler.n_freq * 2)
+
+    def _take_action(self, action: int):
+        diff_freq = np.zeros(self.dct_handler.n_freq)
+        diff_freq[action // 2] = 1 if action % 2 == 0 else -1
+        diff_freq = self.dct_step * diff_freq
+        self.robot.set_normalized_diff(self.dct_handler.idct(diff_freq))
+
+    @abstractmethod
+    def _get_reward(self, action: np.ndarray):
+        raise NotImplementedError
+
+
+class LiftEnvDCT(BaseEnvDCT):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def _get_reward(self, action):
+        object_position, _ = p.getBasePositionAndOrientation(self.object_id)
+        object_height = object_position[2] - 0.01
+        # normalize the reward to [-1, 1]
+        reward = 2 * (object_height - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+        return reward
+
+
+class LiftEnv(BaseEnvSpatial):
     def __init__(self, cfg):
         super(LiftEnv, self).__init__(cfg)
 
@@ -140,7 +188,7 @@ class LiftEnv(BaseEnv):
         return reward
 
 
-class RotateEnv(BaseEnv):
+class RotateEnv(BaseEnvSpatial):
     def __init__(self, cfg):
         super(RotateEnv, self).__init__(cfg)
         self.goal_ori = np.array([cfg.goal.row, cfg.goal.pitch, cfg.goal.yaw])

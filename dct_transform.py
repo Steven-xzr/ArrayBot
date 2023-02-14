@@ -16,7 +16,7 @@ zigzag = np.array([[0, 0],
 class DCT:
     def __init__(self, freq_order=None):
         self.freq_order = 4 if freq_order is None else freq_order
-        self.n_freq = self.freq_order ** 2 - 2 * self.freq_order
+        self.n_freq = (self.freq_order ** 2 + self.freq_order) // 2
         # r_ind, c_ind = np.triu_indices(8, 8 - self.freq_order)
         self.indices = tuple([zigzag[:self.n_freq, 0], zigzag[:self.n_freq, 1]])
 

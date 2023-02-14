@@ -114,6 +114,19 @@ class TableBot:
         self.set_states(target_position)
         return target_position
 
+    def set_normalized_states(self, target_position: np.ndarray):
+        assert target_position.shape == (self.num_side, self.num_side)
+        target_position = target_position * (self.limit_upper - self.limit_lower) + self.limit_lower
+        self.set_states(target_position)
+        return target_position
+
+    def set_normalized_diff(self, diff: np.ndarray):
+        assert diff.shape == (self.num_side, self.num_side)
+        current_position, _ = self.get_states()
+        target_position = current_position + diff * (self.limit_upper - self.limit_lower)
+        self.set_states(target_position)
+        return target_position
+
     def reset(self):
         target_position = np.ones([self.num_side, self.num_side]) * (self.limit_lower + self.limit_upper) / 2
         self.set_states(target_position)
