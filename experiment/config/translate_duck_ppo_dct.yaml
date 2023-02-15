@@ -25,13 +25,26 @@ dct:
 
 object:
   path: "/home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck_vhacd.urdf"
+  visual_path: "/home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck.obj"
   random_position: false
   position: [0.10, 0.10, 8]
   orientation: [1.57, 0, 3.14]
   scale: 1.0
+  mass: 0.1
+  friction:
+    lateral: 0.5
+    spinning: 0.5
+    rolling: 0.5
 
 reward:
   regularization: false
   mode: "height"  # "height" or "motion"
   coefficient: 2  # larger coefficient means more regularization
 
+goal:
+  x: 0.08
+  y: 0.08
+  z: 0.03
+  row: 1.57
+  pitch: 0
+  yaw: 2.5

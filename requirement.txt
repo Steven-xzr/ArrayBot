@@ -6,3 +6,4 @@ hydra
 pfrl==0.3.0
 gym==0.21.0
 opencv-python==4.7.0
+open3d==0.16.0

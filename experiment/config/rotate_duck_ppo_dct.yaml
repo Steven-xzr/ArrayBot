@@ -35,3 +35,7 @@ reward:
   mode: "height"  # "height" or "motion"
   coefficient: 2  # larger coefficient means more regularization
 
+goal:
+  row: 0
+  pitch: 0
+  yaw: 1.57

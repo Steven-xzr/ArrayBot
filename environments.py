@@ -7,6 +7,7 @@ from abc import abstractmethod
 import warnings
 import gym
 import gym.spaces as spaces
+from scipy.spatial.transform import Rotation as R
 
 from tablebot import TableBot
 from dct_transform import DCT
@@ -25,7 +26,18 @@ class BaseEnv(gym.Env):
         self.cfg = cfg
         self.robot = TableBot(cfg.tablebot)
         current_dir = os.path.dirname(os.path.realpath(__file__))
-        self.object_id = p.loadURDF(osp.join(current_dir, cfg.object.path), cfg.object.position)
+        self.object_id = p.loadURDF(cfg.object.path,
+                                    # cfg.object.position,
+                                    # p.getQuaternionFromEuler(cfg.object.orientation),
+                                    globalScaling=cfg.object.scale)
+        p.changeDynamics(self.object_id, -1, mass=cfg.object.mass,
+                         lateralFriction=cfg.object.friction.lateral,
+                         spinningFriction=cfg.object.friction.spinning,
+                         rollingFriction=cfg.object.friction.rolling)
+        center_corr = self.robot.table_size / 2
+        height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
+        self.object_position = [center_corr, center_corr, height]
+        self.object_orientation = p.getQuaternionFromEuler(cfg.object.orientation)
         self.reset()
         self.observation_space = spaces.Dict({
             'object_position': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
@@ -47,9 +59,8 @@ class BaseEnv(gym.Env):
             z = 2 * (obj_pos[2] - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
             return np.array([x, y, z]).astype(np.float32)
 
-        def norm_obj_euler(obj_euler: list):
-            euler = np.array(obj_euler)
-            return (euler / np.pi).astype(np.float32)
+        def norm_obj_ori(obj_ori: np.ndarray):
+            return (obj_ori / np.pi).astype(np.float32)
 
         def norm_image(image: np.ndarray):
             image = 2 * (image - np.amin(image)) / (np.amax(image) - np.amin(image)) - 1
@@ -60,13 +71,13 @@ class BaseEnv(gym.Env):
             return pos.astype(np.float32)
 
         object_position, object_orientation = p.getBasePositionAndOrientation(self.object_id)
-        object_orientation = p.getEulerFromQuaternion(object_orientation)
+        object_orientation = R.from_quat(object_orientation).as_rotvec()
         rgb, depth = self.robot.get_images()
         joint_position, joint_velocity = self.robot.get_states()
 
         return {
             'object_position': norm_obj_pos(object_position),
-            'object_orientation': norm_obj_euler(object_orientation),
+            'object_orientation': norm_obj_ori(object_orientation),
             # 'rgb': norm_image(rgb), 'depth': norm_image(depth),
             'joint_position': norm_joint_pos(joint_position),
             # 'joint_velocity': joint_velocity
@@ -87,15 +98,13 @@ class BaseEnv(gym.Env):
 
     def reset(self):
         self.robot.reset()
-        center_corr = self.robot.table_size / 2
-        height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
+        # center_corr = self.robot.table_size / 2
+        # height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
         if self.cfg.object.random_position:
-            object_corr = [center_corr + (random.random() - 0.5) * self.robot.table_size * 0.8,
-                           center_corr + (random.random() - 0.5) * self.robot.table_size * 0.8,
-                           height]
+            raise NotImplementedError
         else:
-            object_corr = [center_corr, center_corr, height]
-        p.resetBasePositionAndOrientation(self.object_id, object_corr, [0, 0, 0, 1])
+            object_corr = self.object_position
+        p.resetBasePositionAndOrientation(self.object_id, object_corr, self.object_orientation)
         for _ in range(100):
             p.stepSimulation()
         return self._get_obs()
@@ -143,16 +152,27 @@ class BaseEnvSpatial(BaseEnv):
         raise NotImplementedError
 
 
-class BaseEnvDCT(BaseEnv):
+class ManiEnvDCT(BaseEnv):
     def __init__(self, cfg):
         super().__init__(cfg)
         self.dct_handler = DCT(cfg.dct.order)
         self.dct_step = cfg.dct.step
         self.action_space = spaces.Discrete(self.dct_handler.n_freq * 2)
 
+        # visualize the goal configuration
+        self.goal_pos = np.array([cfg.goal.x, cfg.goal.y, cfg.goal.z])
+        goal_ori_euler = np.array([cfg.goal.row, cfg.goal.pitch, cfg.goal.yaw])
+        self.goal_ori = R.from_euler('xyz', goal_ori_euler)
+        vis_shape = p.createVisualShape(p.GEOM_MESH, fileName=cfg.object.visual_path,
+                                        meshScale=[cfg.object.scale * 0.05] * 3,
+                                        rgbaColor=[0, 1, 0, 0.5])
+        vis_goal = p.createMultiBody(0, -1, vis_shape, basePosition=self.goal_pos,
+                                     baseOrientation=self.goal_ori.as_quat())
+
     def _take_action(self, action: int):
         diff_freq = np.zeros(self.dct_handler.n_freq)
-        diff_freq[action // 2] = 1 if action % 2 == 0 else -1
+        if action < self.dct_handler.n_freq * 2:
+            diff_freq[action // 2] = 1 if action % 2 == 0 else -1
         diff_freq = self.dct_step * diff_freq
         self.robot.set_normalized_diff(self.dct_handler.idct(diff_freq))
 
@@ -160,8 +180,16 @@ class BaseEnvDCT(BaseEnv):
     def _get_reward(self, action: np.ndarray):
         raise NotImplementedError
 
+    def _translation_diff(self):
+        return np.linalg.norm(p.getBasePositionAndOrientation(self.object_id)[0] - self.goal_pos)
 
-class LiftEnvDCT(BaseEnvDCT):
+    def _rotation_diff(self):
+        obj_ori = R.from_quat(p.getBasePositionAndOrientation(self.object_id)[1])
+        diff_ori = obj_ori.inv() * self.goal_ori
+        return np.linalg.norm(diff_ori.as_rotvec())
+
+
+class LiftEnvDCT(ManiEnvDCT):
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -171,6 +199,31 @@ class LiftEnvDCT(BaseEnvDCT):
         # normalize the reward to [-1, 1]
         reward = 2 * (object_height - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
         return reward
+
+
+class RotateEnvDCT(ManiEnvDCT):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def _get_reward(self, action):
+        return {"rot_reward": - self._rotation_diff()}
+
+
+class TransEnvDCT(ManiEnvDCT):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def _get_reward(self, action):
+        return {"trans_reward": - self._translation_diff()}
+
+
+class SE3EnvDCT(ManiEnvDCT):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def _get_reward(self, action):
+        return {"rot_reward": - self._rotation_diff(),
+                "trans_reward": - self._translation_diff() * 50}
 
 
 class LiftEnv(BaseEnvSpatial):

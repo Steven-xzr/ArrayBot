@@ -40,7 +40,7 @@ class ActorCritic(torch.nn.Module):
         return tuple([self.head(a_prob), v])
 
 
-@hydra.main(version_base=None, config_path='config', config_name='lift_block_ppo_dct')
+@hydra.main(version_base=None, config_path='config', config_name='lift_duck_ppo_dct')
 def main(cfg):
     env = LiftEnvDCT(cfg)
     env.reset()
