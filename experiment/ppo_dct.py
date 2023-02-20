@@ -59,7 +59,7 @@ def main(cfg):
     )
 
     n_episodes = 500
-    max_episode_len = 200
+    max_episode_len = 100
     for i in range(1, n_episodes + 1):
         obs = env.reset()
         R_rot = 0  # return (sum of rewards)

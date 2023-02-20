@@ -29,12 +29,12 @@ object:
   random_position: false
   position: [0.10, 0.10, 8]
   orientation: [1.57, 0, 3.14]
-  scale: 1.0
+  scale: 2.0
   mass: 0.1
   friction:
-    lateral: 0.5
-    spinning: 0.5
-    rolling: 0.5
+    lateral: 0.75   # default 1.0
+    spinning: 0   # default 0
+    rolling: 0    # default 0
 
 reward:
   regularization: false

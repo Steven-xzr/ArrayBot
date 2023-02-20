@@ -30,10 +30,12 @@ class BaseEnv(gym.Env):
                                     # cfg.object.position,
                                     # p.getQuaternionFromEuler(cfg.object.orientation),
                                     globalScaling=cfg.object.scale)
+        print(p.getDynamicsInfo(self.object_id, -1))
         p.changeDynamics(self.object_id, -1, mass=cfg.object.mass,
                          lateralFriction=cfg.object.friction.lateral,
                          spinningFriction=cfg.object.friction.spinning,
-                         rollingFriction=cfg.object.friction.rolling)
+                         rollingFriction=cfg.object.friction.rolling
+                         )
         center_corr = self.robot.table_size / 2
         height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
         self.object_position = [center_corr, center_corr, height]
