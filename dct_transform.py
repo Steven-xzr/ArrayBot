@@ -14,7 +14,8 @@ zigzag = np.array([[0, 0],
 
 
 class DCT:
-    def __init__(self, freq_order=None):
+    def __init__(self, freq_order=None, dim_active=5):
+        self.dim_active = dim_active
         self.freq_order = 4 if freq_order is None else freq_order
         self.n_freq = (self.freq_order ** 2 + self.freq_order) // 2
         # r_ind, c_ind = np.triu_indices(8, 8 - self.freq_order)
@@ -22,15 +23,15 @@ class DCT:
 
     def dct(self, spatial):
         """
-        transform a [8, 8] array in the spatial domain to [10, ] frequency descriptor
+        transform a [dim_active, dim_active] array in the spatial domain to [10, ] frequency descriptor
         """
         return cv2.dct(spatial.astype(np.float32))[self.indices]
 
     def idct(self, freq):
         """
-        transform a [10, ] frequency descriptor to [8, 8] array in the spatial domain
+        transform a [10, ] frequency descriptor to [dim_active, dim_active] array in the spatial domain
         """
-        all_freq = np.zeros((8, 8))
+        all_freq = np.zeros((self.dim_active, self.dim_active))
         all_freq[self.indices] = freq
         return cv2.idct(all_freq.astype(np.float32))
 

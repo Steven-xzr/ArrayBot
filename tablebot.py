@@ -38,6 +38,10 @@ class TableBot:
         self.act_margin = cfg.tablebot.act_margin
         self.table_size = self.act_size * self.num_side + (self.num_side - 1) * self.act_gap + 2 * self.act_margin
 
+        # Dimension of local perception & action space
+        self.dim_active = cfg.tablebot.dim_active   # odd number
+        self.half_dim = int((self.dim_active - 1) / 2)
+
     def _setup_camera(self, cfg):
         self.width = cfg.width  # in pixels
         self.height = cfg.height  # in pixels
@@ -94,7 +98,7 @@ class TableBot:
             velocity.append(s[1])
         return self.list2array(position), self.list2array(velocity)
 
-    def set_states(self, target_position: np.ndarray, interp_steps=10, sim_steps=10):
+    def set_states(self, target_position: np.ndarray, interp_steps=5, sim_steps=20):
         assert target_position.shape == (self.num_side, self.num_side)
         # consider the joint limits
         target_position = np.clip(target_position, self.limit_lower, self.limit_upper)
@@ -140,7 +144,7 @@ class TableBot:
         assert action.shape == (self.num_side, self.num_side)
         current_position, _ = self.get_states()
         target_position = current_position + (self.limit_upper - self.limit_lower) / granularity * action
-        self.set_states(target_position, interp_steps=10, sim_steps=10)
+        self.set_states(target_position)
 
     def regularization(self, mode='height', action=None):
         if mode == 'height':

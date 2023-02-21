@@ -15,8 +15,7 @@ from dct_transform import DCT
 
 class BaseEnv(gym.Env):
     """
-    To fit the gym and RL framework api, action in the environment is in the shape of (num_act,).
-    However, the action in the robot is in the shape of (num_side, num_side).
+    Local perception & action space in shape (dim_active, dim_active).
     """
     DOWN = 0
     NOOP = 1
@@ -25,65 +24,100 @@ class BaseEnv(gym.Env):
     def __init__(self, cfg):
         self.cfg = cfg
         self.robot = TableBot(cfg.tablebot)
-        current_dir = os.path.dirname(os.path.realpath(__file__))
-        self.object_id = p.loadURDF(cfg.object.path,
-                                    # cfg.object.position,
-                                    # p.getQuaternionFromEuler(cfg.object.orientation),
-                                    globalScaling=cfg.object.scale)
-        print(p.getDynamicsInfo(self.object_id, -1))
+        # current_dir = os.path.dirname(os.path.realpath(__file__))
+        self.obj_base_shift = np.array([cfg.object.shift * cfg.object.scale] * 3)
+        vis_shape = p.createVisualShape(p.GEOM_MESH, fileName=cfg.object.visual_path,
+                                        meshScale=[cfg.object.scale] * 3,
+                                        rgbaColor=[1, 0, 0, 0.9],
+                                        visualFramePosition=self.obj_base_shift * -1
+                                        )
+        col_shape = p.createCollisionShape(p.GEOM_MESH, fileName=cfg.object.visual_path,
+                                           meshScale=[cfg.object.scale] * 3,
+                                           collisionFramePosition=self.obj_base_shift * -1
+                                           )
+        # self.object_id = p.loadURDF(cfg.object.path,
+        #                             # cfg.object.position,
+        #                             # p.getQuaternionFromEuler(cfg.object.orientation),
+        #                             globalScaling=cfg.object.scale)
+        self.object_id = p.createMultiBody(baseCollisionShapeIndex=col_shape, baseVisualShapeIndex=vis_shape,
+                                           # baseInertialFramePosition=self.obj_base_shift
+                                           )
+        # print(p.getDynamicsInfo(self.object_id, -1))
         p.changeDynamics(self.object_id, -1, mass=cfg.object.mass,
                          lateralFriction=cfg.object.friction.lateral,
                          spinningFriction=cfg.object.friction.spinning,
                          rollingFriction=cfg.object.friction.rolling
                          )
-        center_corr = self.robot.table_size / 2
-        height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
-        self.object_position = [center_corr, center_corr, height]
+        # center_corr = self.robot.table_size / 2
+        # height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
+        # self.object_position = [center_corr, center_corr, height]
+
+        self.object_position = cfg.object.position
         self.object_orientation = p.getQuaternionFromEuler(cfg.object.orientation)
-        self.reset()
+        # self.reset()
         self.observation_space = spaces.Dict({
             'object_position': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
             'object_orientation': spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32),
-            'joint_position': spaces.Box(low=-1, high=1, shape=(self.robot.num_side, self.robot.num_side),
+            'joint_position': spaces.Box(low=-1, high=1, shape=(self.robot.dim_active, self.robot.dim_active),
                                          dtype=np.float32),
         })
-        # self.action_space = spaces.Box(low=-1, high=1, shape=(self.robot.num_act,), dtype=np.int8)
-        # self.action_space = spaces.MultiDiscrete(np.ones([self.robot.num_side, self.robot.num_side], dtype=np.int8) * 3)
 
-    def _get_obs(self):
-        # Warning: lacking handlers for object_orientation & joint_velocity (currently not used)
+        # To deal with the case that local perception areas goes out of the border.
+        self.last_joint_pos = np.zeros((self.robot.dim_active, self.robot.dim_active), dtype=np.float32)
+
+    def _get_local_centroid_idx(self):
         """
-        All positions and pixel values are normalized to [-1, 1]
+        Infer the idx of the centroid of local perception space from the object.
         """
-        def norm_obj_pos(obj_pos: list):
-            x = 2 * obj_pos[0] / self.robot.table_size - 1
-            y = 2 * obj_pos[1] / self.robot.table_size - 1
-            z = 2 * (obj_pos[2] - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
-            return np.array([x, y, z]).astype(np.float32)
+        def get_idx_from_corr(xx):
+            return int((xx - self.robot.act_margin - self.robot.act_size / 2) /
+                       (self.robot.act_size + self.robot.act_gap))
 
-        def norm_obj_ori(obj_ori: np.ndarray):
-            return (obj_ori / np.pi).astype(np.float32)
+        object_position, _ = p.getBasePositionAndOrientation(self.object_id)
+        return tuple(map(get_idx_from_corr, object_position[:2]))
 
-        def norm_image(image: np.ndarray):
-            image = 2 * (image - np.amin(image)) / (np.amax(image) - np.amin(image)) - 1
-            return image.astype(np.float32)
+    def _get_norm_local_obj_pos(self, centroid):
+        def get_corr_from_idx(idx):
+            return self.robot.act_margin + self.robot.act_size / 2 + idx * (self.robot.act_size + self.robot.act_gap)
 
-        def norm_joint_pos(joint_pos: np.ndarray):
-            pos = 2 * (joint_pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+        global_object_pos, _ = p.getBasePositionAndOrientation(self.object_id)
+        x = (global_object_pos[0] - get_corr_from_idx(centroid[0])) / (self.robot.act_size + self.robot.act_gap)
+        y = (global_object_pos[1] - get_corr_from_idx(centroid[1])) / (self.robot.act_size + self.robot.act_gap)
+        z = 2 * (global_object_pos[2] - 0.4 - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower)
+        return np.array([x, y, z]).astype(np.float32)
+
+    def _get_norm_obj_ori(self):
+        _, object_orientation = p.getBasePositionAndOrientation(self.object_id)
+        obj_ori = R.from_quat(object_orientation).as_rotvec()
+        return (obj_ori / np.pi).astype(np.float32)
+
+    def _get_norm_local_joint_pos(self, centroid):
+        x_low = centroid[0] - self.robot.half_dim
+        x_high = centroid[0] + self.robot.half_dim + 1
+        y_low = centroid[1] - self.robot.half_dim
+        y_high = centroid[1] + self.robot.half_dim + 1
+        if x_low < 0 or x_high > self.robot.num_side or y_low < 0 or y_high > self.robot.num_side:
+            warnings.warn("Local perception area goes out of the border.")
+            return self.last_joint_pos.astype(np.float32)
+        else:
+            joint_position, _ = self.robot.get_states()
+            pos = joint_position[x_low:x_high, y_low:y_high]
+            assert pos.shape == (self.robot.dim_active, self.robot.dim_active)
+            pos = 2 * (pos - self.robot.limit_lower) / (self.robot.limit_upper - self.robot.limit_lower) - 1
+            self.last_joint_pos = pos
             return pos.astype(np.float32)
 
-        object_position, object_orientation = p.getBasePositionAndOrientation(self.object_id)
-        object_orientation = R.from_quat(object_orientation).as_rotvec()
-        rgb, depth = self.robot.get_images()
-        joint_position, joint_velocity = self.robot.get_states()
-
-        return {
-            'object_position': norm_obj_pos(object_position),
-            'object_orientation': norm_obj_ori(object_orientation),
-            # 'rgb': norm_image(rgb), 'depth': norm_image(depth),
-            'joint_position': norm_joint_pos(joint_position),
-            # 'joint_velocity': joint_velocity
-        }
+    def _pad_from_local(self, local_array):
+        centroid = self._get_local_centroid_idx()
+        global_array = np.pad(local_array, ((centroid[0] - self.robot.half_dim,
+                                             self.robot.num_side - centroid[0] - self.robot.half_dim - 1),
+                                            (centroid[1] - self.robot.half_dim,
+                                             self.robot.num_side - centroid[1] - self.robot.half_dim - 1)),
+                              # mode='constant', constant_values=-1
+                              mode='edge'
+                              )
+        assert global_array.shape == (self.robot.num_side, self.robot.num_side)
+        return global_array
 
     @abstractmethod
     def _take_action(self, action: np.ndarray):
@@ -94,11 +128,11 @@ class BaseEnv(gym.Env):
         raise NotImplementedError
 
     def _is_done(self):
-        object_position, _ = p.getBasePositionAndOrientation(self.object_id)
-        inside = 0 < object_position[0] < self.robot.table_size and 0 < object_position[1] < self.robot.table_size
-        return not inside
+        centroid = self._get_local_centroid_idx()
+        return not (self.robot.half_dim <= centroid[0] < self.robot.num_side - self.robot.half_dim and
+                    self.robot.half_dim <= centroid[1] < self.robot.num_side - self.robot.half_dim)
 
-    def reset(self):
+    def _reset_robot(self):
         self.robot.reset()
         # center_corr = self.robot.table_size / 2
         # height = (self.robot.limit_lower + self.robot.limit_upper) / 2 + 0.1
@@ -109,7 +143,15 @@ class BaseEnv(gym.Env):
         p.resetBasePositionAndOrientation(self.object_id, object_corr, self.object_orientation)
         for _ in range(100):
             p.stepSimulation()
-        return self._get_obs()
+        # return self._get_obs()
+
+    @abstractmethod
+    def reset(self):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _get_obs(self):
+        raise NotImplementedError
 
     def step(self, action: np.ndarray):
         self._take_action(action)
@@ -157,7 +199,7 @@ class BaseEnvSpatial(BaseEnv):
 class ManiEnvDCT(BaseEnv):
     def __init__(self, cfg):
         super().__init__(cfg)
-        self.dct_handler = DCT(cfg.dct.order)
+        self.dct_handler = DCT(cfg.dct.order, cfg.tablebot.robot.tablebot.dim_active)
         self.dct_step = cfg.dct.step
         self.action_space = spaces.Discrete(self.dct_handler.n_freq * 2)
 
@@ -166,21 +208,53 @@ class ManiEnvDCT(BaseEnv):
         goal_ori_euler = np.array([cfg.goal.row, cfg.goal.pitch, cfg.goal.yaw])
         self.goal_ori = R.from_euler('xyz', goal_ori_euler)
         vis_shape = p.createVisualShape(p.GEOM_MESH, fileName=cfg.object.visual_path,
-                                        meshScale=[cfg.object.scale * 0.05] * 3,
-                                        rgbaColor=[0, 1, 0, 0.5])
-        vis_goal = p.createMultiBody(0, -1, vis_shape, basePosition=self.goal_pos,
-                                     baseOrientation=self.goal_ori.as_quat())
+                                        meshScale=[cfg.object.scale] * 3,
+                                        rgbaColor=[0, 1, 0, 0.5],
+                                        visualFramePosition=self.obj_base_shift * -1)
+        p.createMultiBody(0, -1, vis_shape, basePosition=self.goal_pos,
+                          baseOrientation=self.goal_ori.as_quat())
+
+        # reward
+        self.last_translation_diff = -1
+        self.last_rotation_diff = -1
+        self.translation_factor = cfg.reward.translation_factor
+        self.rotation_factor = cfg.reward.rotation_factor
 
     def _take_action(self, action: int):
         diff_freq = np.zeros(self.dct_handler.n_freq)
         if action < self.dct_handler.n_freq * 2:
             diff_freq[action // 2] = 1 if action % 2 == 0 else -1
         diff_freq = self.dct_step * diff_freq
-        self.robot.set_normalized_diff(self.dct_handler.idct(diff_freq))
+        self.robot.set_normalized_diff(self._pad_from_local(self.dct_handler.idct(diff_freq)))
 
     @abstractmethod
     def _get_reward(self, action: np.ndarray):
         raise NotImplementedError
+
+    def _get_norm_diff_pos(self):
+        obj_pos, _ = p.getBasePositionAndOrientation(self.object_id)
+        diff_pos = obj_pos - self.goal_pos
+        return diff_pos.astype(np.float32) / self.robot.table_size
+
+    def _get_obs(self):
+        # Warning: lacking handlers for object_orientation & joint_velocity (currently not used)
+        """
+        All positions and pixel values are normalized to [-1, 1]
+        """
+        centroid = self._get_local_centroid_idx()
+
+        return {
+            'object_position': self._get_norm_local_obj_pos(centroid),
+            'object_orientation': self._get_norm_obj_ori(),
+            'diff_position': self._get_norm_diff_pos(),
+            'joint_position': self._get_norm_local_joint_pos(centroid),
+        }
+
+    def reset(self):
+        self._reset_robot()
+        self.last_translation_diff = self._translation_diff()
+        self.last_rotation_diff = self._rotation_diff()
+        return self._get_obs()
 
     def _translation_diff(self):
         return np.linalg.norm(p.getBasePositionAndOrientation(self.object_id)[0] - self.goal_pos)
@@ -224,8 +298,17 @@ class SE3EnvDCT(ManiEnvDCT):
         super().__init__(cfg)
 
     def _get_reward(self, action):
-        return {"rot_reward": - self._rotation_diff(),
-                "trans_reward": - self._translation_diff() * 50}
+        t_diff = self._translation_diff()
+        r_diff = self._rotation_diff()
+        delta_t_diff = t_diff - self.last_translation_diff
+        delta_r_diff = r_diff - self.last_rotation_diff
+        self.last_translation_diff = t_diff
+        self.last_rotation_diff = r_diff
+        return {"rot_reward": - delta_r_diff * self.rotation_factor,
+                "trans_reward": - delta_t_diff * self.translation_factor,
+                                # - t_diff,
+                "trans_diff": t_diff,
+                }
 
 
 class LiftEnv(BaseEnvSpatial):

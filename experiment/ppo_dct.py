@@ -8,7 +8,7 @@ from pfrl.policies import SoftmaxCategoricalHead
 
 
 class ActorCritic(torch.nn.Module):
-    def __init__(self, dim_obj=6, dim_freq=10):
+    def __init__(self, dim_obj=6, dim_freq=6):
         super().__init__()
         self.p_net = torch.nn.Sequential(
             torch.nn.Linear(dim_obj + dim_freq, 64),
@@ -40,7 +40,7 @@ class ActorCritic(torch.nn.Module):
         return tuple([self.head(a_prob), v])
 
 
-@hydra.main(version_base=None, config_path='config', config_name='se3_duck_ppo_dct')
+@hydra.main(version_base=None, config_path='config', config_name='se3_egad_ppo_dct')
 def main(cfg):
     # env = LiftEnvDCT(cfg)
     # env = TransEnvDCT(cfg)
@@ -55,31 +55,32 @@ def main(cfg):
         opt,
         gpu=0,
         update_interval=128,
-        phi=lambda x: (x['object_position'], x['object_orientation'], env.dct_handler.dct(x['joint_position'])),
+        phi=lambda x: (x['object_position'], x['diff_position'], env.dct_handler.dct(x['joint_position'])),
+        entropy_coef=cfg.rl.entropy_coef,
     )
 
-    n_episodes = 500
-    max_episode_len = 100
+    n_episodes = 1000
+    max_episode_len = 500
     for i in range(1, n_episodes + 1):
         obs = env.reset()
-        R_rot = 0  # return (sum of rewards)
-        R_trans = 0
+        diff_all = 0
+        reward_all = 0
         t = 0  # time step
         while True:
             # Uncomment to watch the behavior in a GUI window
             # env.render()
             action = agent.act(obs)
             obs, reward_dict, done, _ = env.step(action)
-            R_rot += reward_dict['rot_reward']
-            R_trans += reward_dict['trans_reward']
+            diff_all += reward_dict['trans_diff']
+            reward_all += reward_dict['trans_reward']
             t += 1
             reset = t == max_episode_len
-            agent.observe(obs, reward_dict['rot_reward'] + reward_dict['trans_reward'], done, reset)
+            agent.observe(obs, reward_dict['trans_reward'], done, reset)
             if done or reset:
                 break
         if i % 1 == 0:
-            print('episode:', i, 'R_rot:', R_rot / t, 'R_trans:', R_trans / t)
-        if i % 50 == 0:
+            print('episode:', i, 'reward:', reward_all / t, 'diff:', diff_all / t)
+        if i % 10 == 0:
             print('statistics:', agent.get_statistics())
     print('Finished.')
 

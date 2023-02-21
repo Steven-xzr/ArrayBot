@@ -11,6 +11,7 @@ tablebot:
       act_gap: 0.001
       act_margin: 0.010
       num_joint_per_act: 3
+      dim_active: 5
   camera:
     distance: 0.25
     fov: 60
@@ -21,20 +22,21 @@ tablebot:
 
 dct:
   order: 4
-  step: 0.5
+  step: 0.5   # step on the selected freq. per action
 
 object:
   path: "/home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck_vhacd.urdf"
-  visual_path: "/home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck.obj"
+  visual_path: "/home/zhengrong/egad/train/I24_3.obj"
   random_position: false
-  position: [0.10, 0.10, 8]
+  position: [0.15, 0.06, 0.05]
   orientation: [1.57, 0, 3.14]
-  scale: 2.0
+  scale: 0.001
+  shift: 50
   mass: 0.1
   friction:
     lateral: 0.75   # default 1.0
-    spinning: 0   # default 0
-    rolling: 0    # default 0
+    spinning: 0.2   # default 0
+    rolling: 0.2    # default 0
 
 reward:
   regularization: false
