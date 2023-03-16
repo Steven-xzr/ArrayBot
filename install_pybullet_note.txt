@@ -1,0 +1,6 @@
+*Note: Due to the number of joints limit of the default version, pybullet needs to be installed from source.
+
+1. Clone the source code from GitHub https://github.com/bulletphysics/bullet3
+2. Revise the number of joints in https://github.com/bulletphysics/bullet3/blob/master/examples/SharedMemory/SharedMemoryCommands.h#L33 from 128 to 1024
+3. Install cmake and g++
+4. export PYTHONPATH=/your_path_to_bullet/build_cmake/examples/pybullet

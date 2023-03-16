@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (tablebot)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Remote Python 3.10.9 (sftp://xuezhengrong@10.220.5.27:9010/home/xuezhengrong/miniconda3/envs/tablebot/bin/python)" project-jdk-type="Python SDK" />
 </project>

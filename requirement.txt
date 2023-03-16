@@ -1,12 +1,9 @@
-pybullet*
 numpy
 scipy
 torch==1.13.0
-hydra
+hydra-core==1.2.0
 pfrl==0.3.0
 gym==0.21.0
-opencv-python==4.7.0
+opencv-python==4.7.0.72
 open3d==0.16.0
-
-
-*Note: Due to the number of joints limit of the default version, pybullet needs to be installed from source.
+stable-baselines3[extra]==1.6.2

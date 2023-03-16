@@ -26,12 +26,12 @@ dct:
 
 object:
   path: "/home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck_vhacd.urdf"
-  visual_path: "/home/zhengrong/egad/train/B11_2.obj"
+  visual_path: "/home/zhengrong/egad/eval/C0.obj"
   random_position: false
   position: [0.08, 0.08, 0.1]
   orientation: [0, 0, 0]
-  scale: 0.001
-  shift: 37.5
+  scale: 0.0006
+  shift: 45
   mass: 0.1
   friction:
     lateral: 0.5   # default 1.0
@@ -41,8 +41,13 @@ object:
 reward:
   regularization: false
   mode: "height"  # "height" or "motion"
-  translation_factor: 1000
-  rotation_factor: 0
+  t_diff_factor: 0.1
+  t_delta_diff_factor: 1000
+  r_diff_factor: 1
+  r_delta_diff_factor: 1000
+  reach_threshold: 0.02
+  reach_bonus: 10
+  out_of_border_penalty: 0
 
 goal:
   x: 0.20
@@ -54,3 +59,4 @@ goal:
 
 rl:
   entropy_coef: 0.01
+  minibatch_size: 64
