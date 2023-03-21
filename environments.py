@@ -3,6 +3,7 @@ import random
 import numpy as np
 import os
 import os.path as osp
+import time
 from abc import abstractmethod
 import warnings
 import gym
@@ -27,12 +28,13 @@ class BaseEnv(gym.Env):
         self.max_steps = cfg.env.max_episode_steps
         # current_dir = os.path.dirname(os.path.realpath(__file__))
         self.obj_base_shift = np.array([cfg.object.shift * cfg.object.scale] * 3)
-        vis_shape = p.createVisualShape(p.GEOM_MESH, fileName=cfg.object.visual_path,
+        obj_path = osp.join(os.path.expanduser('~'), cfg.object.visual_path)
+        vis_shape = p.createVisualShape(p.GEOM_MESH, fileName=obj_path,
                                         meshScale=[cfg.object.scale] * 3,
                                         rgbaColor=[1, 0, 0, 0.9],
                                         visualFramePosition=self.obj_base_shift * -1
                                         )
-        col_shape = p.createCollisionShape(p.GEOM_MESH, fileName=cfg.object.visual_path,
+        col_shape = p.createCollisionShape(p.GEOM_MESH, fileName=obj_path,
                                            meshScale=[cfg.object.scale] * 3,
                                            collisionFramePosition=self.obj_base_shift * -1
                                            )
@@ -152,12 +154,12 @@ class BaseEnv(gym.Env):
         else:
             object_corr = self.object_position
         p.resetBasePositionAndOrientation(self.object_id, object_corr, self.object_orientation)
-        for _ in range(100):
+        for _ in range(20):
             p.stepSimulation()
         # return self._get_obs()
 
     @abstractmethod
-    def reset(self):
+    def reset(self, seed=0, options=None):
         raise NotImplementedError
 
     @abstractmethod
@@ -174,7 +176,7 @@ class BaseEnv(gym.Env):
         reward = self._get_reward(action)
         done = self._is_done()
         info = self._get_info()
-        return obs, reward, done, info
+        return obs, reward, done, False, info
 
     # def sample_action(self):
     #     return np.random.randint(-1, 2, [self.robot.num_side, self.robot.num_side])
@@ -253,7 +255,8 @@ class ManiEnvDCT(BaseEnv):
         if action < self.dct_handler.n_freq * 2:
             diff_freq[action // 2] = 1 if action % 2 == 0 else -1
         diff_freq = self.dct_step * diff_freq
-        self.robot.set_normalized_diff(self._pad_from_local(self.dct_handler.idct(diff_freq)))
+        normalized_diff = self._pad_from_local(self.dct_handler.idct(diff_freq))
+        self.robot.set_normalized_diff(normalized_diff)
 
     @abstractmethod
     def _get_reward(self, action: np.ndarray):
@@ -283,11 +286,12 @@ class ManiEnvDCT(BaseEnv):
             'joint_position': self.dct_handler.dct(self._get_norm_local_joint_pos(centroid)),
         }
 
-    def reset(self):
+    def reset(self, seed=0, options=None):
+        # print('reset called')
         self._reset_robot()
         self.last_translation_diff = self._translation_diff()
         self.last_rotation_diff = self._rotation_diff()
-        return self._get_obs()
+        return self._get_obs(), {}
 
     def _translation_diff(self):
         return np.linalg.norm(p.getBasePositionAndOrientation(self.object_id)[0] - self.goal_pos)
@@ -338,8 +342,8 @@ class TransEnvDCT(ManiEnvDCT):
         if t_diff < self.reach_threshold:
             # print("Reach the goal!!!!!")
             bonus = self.reach_bonus
-        return {"t_diff": self.t_diff_factor / (t_diff + 1e-6),
-                "t_delta_diff": - delta_t_diff * self.t_delta_diff_factor,
+        return {"t_diff": float(self.t_diff_factor / (t_diff + 1e-6)),
+                "t_delta_diff": float(- delta_t_diff * self.t_delta_diff_factor),
                 "bonus": bonus}
 
 #

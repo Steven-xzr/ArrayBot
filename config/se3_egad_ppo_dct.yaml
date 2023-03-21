@@ -19,7 +19,7 @@ env:
     height: 640
     near: 0.1
     far: 1
-  max_episode_steps: 250
+  max_episode_steps: 200
 
 dct:
   order: 3
@@ -27,9 +27,9 @@ dct:
 
 object:
 #  path: "/home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck_vhacd.urdf"
-  visual_path: "/home/xuezhengrong/egad/eval/C0.obj"
+  visual_path: "egad/eval/C0.obj"
   random_position: false
-  position: [0.08, 0.08, 0.1]
+  position: [0.08, 0.08, 0.09]
   orientation: [0, 0, 0]
   scale: 0.0006
   shift: 45
@@ -43,9 +43,9 @@ reward:
   regularization: false
   mode: "height"  # "height" or "motion"
   t_diff_factor: 0.1
-  t_delta_diff_factor: 1000
+  t_delta_diff_factor: 100
   r_diff_factor: 1
-  r_delta_diff_factor: 1000
+  r_delta_diff_factor: 100
   reach_threshold: 0.02
   reach_bonus: 10
   out_of_border_penalty: 0

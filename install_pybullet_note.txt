@@ -3,4 +3,5 @@
 1. Clone the source code from GitHub https://github.com/bulletphysics/bullet3
 2. Revise the number of joints in https://github.com/bulletphysics/bullet3/blob/master/examples/SharedMemory/SharedMemoryCommands.h#L33 from 128 to 1024
 3. Install cmake and g++
-4. export PYTHONPATH=/your_path_to_bullet/build_cmake/examples/pybullet
+4. bash build_cmake_pybullet_double.sh
+5. export PYTHONPATH=/your_path_to_bullet/build_cmake/examples/pybullet
