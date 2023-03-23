@@ -49,14 +49,14 @@ def main(cfg):
     #             tensorboard_log='logs')
 
     print(train_env.reset())
+    #
+    # model = PPO(MultiInputPolicy, train_env, verbose=0, n_steps=n_steps, batch_size=n_procs * n_steps)
+    # model.learn(total_timesteps=10000, reset_num_timesteps=False, progress_bar=True)
 
-    model = PPO(MultiInputPolicy, train_env, verbose=0, n_steps=n_steps, batch_size=n_procs * n_steps)
-    model.learn(total_timesteps=10000, reset_num_timesteps=False, progress_bar=True)
-
-    logId = p.startStateLogging(p.STATE_LOGGING_PROFILE_TIMINGS, "remote.json")
-    for t in tqdm(range(100)):
+    # logId = p.startStateLogging(p.STATE_LOGGING_PROFILE_TIMINGS, "remote.json")
+    for t in tqdm(range(1000)):
         p.stepSimulation()
-    p.stopStateLogging(logId)
+    # p.stopStateLogging(logId)
         # obs, rew, done, truc, info = train_env.step(train_env.action_space.sample())
         # if done:
         #     print('done at ', t)
