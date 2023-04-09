@@ -39,7 +39,7 @@ class TableBot:
         self.table_size = self.act_size * self.num_side + (self.num_side - 1) * self.act_gap + 2 * self.act_margin
 
         # Dimension of local perception & action space
-        self.dim_active = cfg.tablebot.dim_active   # odd number
+        self.dim_active = cfg.tablebot.dim_local   # odd number
         self.half_dim = int((self.dim_active - 1) / 2)
 
     def _setup_camera(self, cfg):

@@ -217,7 +217,7 @@ class BaseEnv(gym.Env):
 class ManiEnvDCT(BaseEnv):
     def __init__(self, cfg):
         super().__init__(cfg)
-        self.dct_handler = DCT(cfg.dct.order, cfg.env.robot.tablebot.dim_active)
+        self.dct_handler = DCT(cfg.dct.order, cfg.env.robot.tablebot.dim_local)
         self.dct_step = cfg.dct.step
         self.action_space = spaces.Discrete(self.dct_handler.n_freq * 2 + 1)
         self.observation_space = spaces.Dict({

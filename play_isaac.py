@@ -219,7 +219,7 @@ counter = 0
 
 # while not gym.query_viewer_has_closed(viewer):
 # while True:
-for _ in tqdm(range(1000)):
+for _ in tqdm(range(100)):
 
     # done = gym.set_dof_position_target_tensor(sim, gymtorch.unwrap_tensor(mid_positions))
     # if counter % 1000 == 0:
