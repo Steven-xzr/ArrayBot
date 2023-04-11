@@ -8,7 +8,7 @@ dct:
   dim_local: 5  # object-centric, local perception and action field
 
 goal:
-  pos: [0.0, 0.0, 0.0]
+  pos: [0.22, 0.22, 0.01]
   ori: [0.0, 0.0, 0.0, 1.0]
 
 reward:
@@ -27,7 +27,7 @@ env:
   numActions: 6   # dct desc. (6)
 
 #  clipObservations: 5.0
-#  clipActions: 1.0
+  clipActions: 1.0
 
   controlFrequencyInv: 5   # how many sim steps per RL step
 
@@ -40,8 +40,8 @@ env:
     damping: 200.0
     effort: 1000.0
   object:
-    x: 0.16
-    y: 0.16
+    x: 0.20
+    y: 0.20
     z: 0.01
   assets:
     robot:
@@ -61,7 +61,7 @@ sim:
   physx:
     num_threads: 1
     solver_type: 1
-    use_gpu: "cuda:0"
+    use_gpu: True
     num_position_iterations: 8
     num_velocity_iterations: 0
 #    contact_offset: 0.02
