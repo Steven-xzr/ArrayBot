@@ -1,62 +1,81 @@
 import hydra
-import numpy as np
-import time
-from gym.wrappers import TimeLimit, AutoResetWrapper
-from stable_baselines3 import PPO
-from stable_baselines3.ppo import MultiInputPolicy
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
-from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.monitor import Monitor
+import os
+import wandb
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig
+from termcolor import cprint
 
-from environments import TransEnvDCT
+import isaacgym
+import torch
 
+from isaacgymenvs.tasks import isaacgym_task_map
+from isaacgymenvs.utils.reformat import omegaconf_to_dict
+from isaacgymenvs.utils.utils import set_np_formatting, set_seed
 
-def make_env(cfg, rank, seed=0):
-    """
-    Utility function for multiprocessed env.
+from algo.ppo.ppo import PPO
 
-    :param cfg
-    :param seed: (int) the initial seed
-    :param rank: (int) index of the subprocess
-    """
-
-    def _init():
-        env = TransEnvDCT(cfg)
-        # env = Monitor(TimeLimit(AutoResetWrapper(env), env.max_steps))
-        env = Monitor(TimeLimit(env, env.max_steps))
-        # Important: use a different seed for each environment
-        # env.seed(seed + rank)
-        return env
-
-    set_random_seed(seed)
-    return _init
+from array_robot_vectask import ArrayRobot
 
 
-@hydra.main(version_base=None, config_path='config', config_name='se3_egad_ppo_dct')
-def main(cfg):
-    n_procs = 64
-    n_steps = 8
-    train_env = SubprocVecEnv([make_env(cfg, i) for i in range(n_procs)], start_method='fork')
-    # train_env = DummyVecEnv([make_env(cfg, i) for i in range(n_procs)])
-    eval_env = Monitor(TransEnvDCT(cfg))
+@hydra.main(config_name='config', config_path='algo/configs')
+def main(config: DictConfig):
+    if config.checkpoint:
+        config.checkpoint = to_absolute_path(config.checkpoint)
 
-    model = PPO(MultiInputPolicy, train_env, verbose=0, n_steps=n_steps, batch_size=n_procs * n_steps,
-                tensorboard_log='logs')
+    # set numpy formatting for printing only
+    set_np_formatting()
 
-    NUM_ITERS = 100
-    TRAIN_STEPS = 10000
-    # Number of episodes for evaluation
-    EVAL_EPS = 2
+    if config.train.ppo.multi_gpu:
+        rank = int(os.getenv("LOCAL_RANK", "0"))
+        # torchrun --standalone --nnodes=1 --nproc_per_node=2 train.py
+        config.sim_device = f'cuda:{rank}'
+        config.rl_device = f'cuda:{rank}'
+        # sets seed. if seed is -1 will pick a random one
+        config.seed = set_seed(config.seed + rank)
+    else:
+        # use the same device for sim and rl
+        # config.sim_device = f'cuda:{config.device_id}' if config.device_id >= 0 else 'cpu'
+        # config.rl_device = f'cuda:{config.device_id}' if config.device_id >= 0 else 'cpu'
+        config.seed = set_seed(config.seed)
 
-    for iter in range(NUM_ITERS):
-        print("iter:", iter, "starts")
-        train_env.reset()
-        model.learn(total_timesteps=TRAIN_STEPS, reset_num_timesteps=False, progress_bar=True, tb_log_name='ppo_dct')
-        mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
-        print("iter:", iter, " rewards:", np.mean(mean_reward))
-        model.save("models/ppo_{}".format(iter))
-    train_env.close()
+    cprint('Start Building the Environment', 'green', attrs=['bold'])
+    # env = isaacgym_task_map[config.task_name](
+    env = ArrayRobot(
+        cfg=omegaconf_to_dict(config.task),
+        sim_device=config.sim_device,
+        rl_device=config.rl_device,
+        graphics_device_id=config.graphics_device_id,
+        headless=config.headless,
+        virtual_screen_capture=False,
+        force_render=True,
+    )
+
+    minibatch_size = config.train.ppo.horizon_length * config.num_envs
+    print(f'Using minibatch size of {minibatch_size} for PPO')
+    config.train.ppo.minibatch_size = minibatch_size
+    output_dif = os.path.join('algo/outputs', config.output_name)
+    os.makedirs(output_dif, exist_ok=True)
+
+    agent = PPO(env, output_dif, full_config=config)
+    if config.test:
+        if config.checkpoint:
+            agent.restore_test(config.checkpoint)
+        agent.test()
+    else:
+        # connect to wandb
+        wandb.init(
+            project=config.wandb_project,
+            entity=config.wandb_entity,
+            name=config.output_name,
+            config=omegaconf_to_dict(config),
+            mode=config.wandb_mode
+        )
+
+        agent.restore_train(config.checkpoint)
+        agent.train()
+
+        # close wandb
+        wandb.finish()
 
 
 if __name__ == '__main__':

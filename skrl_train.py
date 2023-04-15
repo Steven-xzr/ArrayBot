@@ -1,5 +1,3 @@
-import isaacgym
-
 import torch
 import torch.nn as nn
 
@@ -11,12 +9,9 @@ from skrl.resources.schedulers.torch import KLAdaptiveRL
 from skrl.resources.preprocessors.torch import RunningStandardScaler
 from skrl.trainers.torch import SequentialTrainer
 from skrl.envs.torch import wrap_env
-from skrl.envs.torch import load_isaacgym_env_preview4
 from skrl.utils import set_seed
 
 import isaacgymenvs
-from array_robot_vectask import ArrayRobot
-
 
 # set the seed for reproducibility
 set_seed(42)

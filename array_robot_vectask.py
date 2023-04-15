@@ -9,6 +9,7 @@ from isaacgym import gymutil, gymtorch, gymapi
 from isaacgymenvs.tasks.base.vec_task import VecTask
 
 import torch
+# from torch.distributions.exponential import Exponential
 from dct_transform import BatchDCT
 
 
@@ -146,6 +147,8 @@ class ArrayRobot(VecTask):
         self.envs = []
         self.robot_row_handles = []
         self.object_handles = []
+        self.object_base_pos = torch.tensor([cfg.object.x, cfg.object.y, cfg.object.z + self.object_half_extend],
+                                            device=self.device)
 
         print("Creating %d environments." % self.num_envs)
         for i in range(self.num_envs):
@@ -174,7 +177,6 @@ class ArrayRobot(VecTask):
                 self.gym.set_actor_dof_properties(env, robot_row_handle, props)
                 self.gym.set_actor_dof_states(env, robot_row_handle, self.init_asset_dof_states, gymapi.STATE_ALL)
 
-            # TODO: randomly initialized object poses
             pose_object = gymapi.Transform()
             pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_half_extend + cfg.object.z)
             pose_object.r = gymapi.Quat(0, 0.0, 0.0, 1)
@@ -244,9 +246,16 @@ class ArrayRobot(VecTask):
 
     def reset_idx(self, env_ids):
         # TODO: support random initial pose of the object
+        if len(env_ids) == 0:
+            return
+
+        # xyz_dist = Exponential(torch.tensor([5.0, 5.0, 5.0]))
+        # object_pos = xyz_dist.sample((len(env_ids),)) * (self.goal_pos - self.object_base_pos) + self.object_base_pos
 
         # reset root state for robots and objects in selected envs
         self.root_states[env_ids] = self.initial_root_states[env_ids]
+        # selected_object_pos = self.object_positions[env_ids]
+        # self.root_states[env_ids, -1, 0:3] = object_pos.float()
         actor_indices = self.all_actor_indices[env_ids].flatten()
         self.gym.set_actor_root_state_tensor_indexed(self.sim, self.root_tensor, gymtorch.unwrap_tensor(actor_indices),
                                                      len(actor_indices))
@@ -286,17 +295,22 @@ class ArrayRobot(VecTask):
         #         dof_shifts.append(m(dof_shift.unsqueeze(0)).squeeze(0))
         # dof_shifts = torch.stack(dof_shifts, dim=0).reshape(self.num_envs, self.robot_side ** 2)
 
-        dof_targets = []
+        # dof_targets = []
         for env_id, dof_shift in enumerate(local_dof_shifts):
             if env_id not in reset_env_ids:
                 centroid = self.local_centroid_buf[env_id]  # [2]
-                dof_target = self.dof_position_targets[env_id].reshape(self.robot_side, self.robot_side)[centroid[0] - self.half_dim:centroid[0] + self.half_dim + 1, centroid[1] - self.half_dim:centroid[1] + self.half_dim + 1]
-                dof_target += dof_shift
-                m = torch.nn.ReplicationPad2d(
-                    (centroid[0] - self.half_dim, self.robot_side - centroid[0] - self.half_dim - 1,
-                     centroid[1] - self.half_dim, self.robot_side - centroid[1] - self.half_dim - 1))
-                dof_targets.append(m(dof_target.unsqueeze(0)).squeeze(0))
-                self.dof_position_targets[env_id] = m(dof_target.unsqueeze(0)).squeeze(0).reshape(self.robot_side ** 2)
+                dof_target_global = self.dof_position_targets[env_id].reshape(self.robot_side, self.robot_side)
+                dof_target_local = dof_target_global[centroid[0] - self.half_dim:centroid[0] + self.half_dim + 1,
+                                                     centroid[1] - self.half_dim:centroid[1] + self.half_dim + 1]
+                dof_target_local += dof_shift * self.dt * self.action_speed_scale
+                # m = torch.nn.ReplicationPad2d(
+                #     (centroid[0] - self.half_dim, self.robot_side - centroid[0] - self.half_dim - 1,
+                #      centroid[1] - self.half_dim, self.robot_side - centroid[1] - self.half_dim - 1))
+                # m = torch.nn.ConstantPad2d(
+                #     (centroid[0] - self.half_dim, self.robot_side - centroid[0] - self.half_dim - 1,
+                #      centroid[1] - self.half_dim, self.robot_side - centroid[1] - self.half_dim - 1), 0)
+                # # dof_targets.append(m(dof_target_local.unsqueeze(0)).squeeze(0))
+                # self.dof_position_targets[env_id] = m(dof_target_local.unsqueeze(0)).squeeze(0).reshape(self.robot_side ** 2)
         # dof_targets = torch.stack(dof_targets, dim=0).reshape(self.num_envs, self.robot_side ** 2)
 
         # update position targets from actions
