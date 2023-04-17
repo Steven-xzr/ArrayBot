@@ -45,20 +45,25 @@ def main(config: DictConfig):
     os.makedirs(output_dif, exist_ok=True)
 
     agent = PPO(env, output_dif, full_config=config)
-    # connect to wandb
-    wandb.init(
-        project=config.wandb_project,
-        entity=config.wandb_entity,
-        name=config.output_name,
-        config=omegaconf_to_dict(config),
-        mode=config.wandb_mode
-    )
+    if config.test:
+        if config.checkpoint:
+            agent.restore_test(config.checkpoint)
+        agent.test()
+    else:
+        # connect to wandb
+        wandb.init(
+            project=config.wandb_project,
+            entity=config.wandb_entity,
+            name=config.output_name,
+            config=omegaconf_to_dict(config),
+            mode=config.wandb_mode
+        )
 
-    agent.restore_train(config.checkpoint)
-    agent.train()
+        agent.restore_train(config.checkpoint)
+        agent.train()
 
-    # close wandb
-    wandb.finish()
+        # close wandb
+        wandb.finish()
 
 
 if __name__ == '__main__':
