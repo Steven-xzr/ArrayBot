@@ -19,6 +19,7 @@ class ArrayRobot(VecTask):
         self.cfg = OmegaConf.create(cfg)
         self.ori_obs = self.cfg.ori_obs
         cfg["env"]["numObservations"] = 16 if self.ori_obs else 12
+        # cfg["env"]["numObservations"] = 12 - 3
         self.fixed_init = self.cfg.fixed_init
         super().__init__(config=cfg, rl_device=rl_device, sim_device=sim_device,
                          graphics_device_id=graphics_device_id, headless=headless,
@@ -227,10 +228,9 @@ class ArrayRobot(VecTask):
         robot_local = torch.stack(local_tensors, dim=0)     # [num_envs, local_side, local_side]
         robot_dct = self.dct_handler.dct(robot_local)  # [num_envs, dct_handler.n_freq]
 
-        if self.ori_obs:
-            self.obs_buf = torch.cat([obj_pos, obj_ori, obj_diff_pos, robot_dct], dim=-1)
-        else:
-            self.obs_buf = torch.cat([obj_pos, obj_diff_pos, robot_dct], dim=-1)
+        # self.obs_buf = torch.cat([obj_pos, obj_ori, obj_diff_pos, robot_dct], dim=-1)
+        self.obs_buf = torch.cat([obj_pos, obj_diff_pos, robot_dct], dim=-1)
+        # self.obs_buf = torch.cat([obj_pos, robot_dct], dim=-1)
         return self.obs_buf
 
     def compute_reward(self):
