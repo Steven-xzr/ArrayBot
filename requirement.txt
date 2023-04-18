@@ -6,6 +6,7 @@ hydra-core==1.2.0
 gym==0.21.0
 torch-dct
 wandb
+trimesh
 
 
 ===== manually install =======
