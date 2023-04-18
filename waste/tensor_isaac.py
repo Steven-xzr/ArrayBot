@@ -81,12 +81,12 @@ cam_pos = gymapi.Vec3(-0.6, -0.6, 1.5)
 cam_target = gymapi.Vec3(0.6, 0.6, 0)
 gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
 
-robot_root = os.path.join(os.path.expanduser("~"), "TableBot", "urdf")
+robot_root = os.path.join(os.path.expanduser("~"), "TableBot", "../urdf")
 robot_file = "tablebot_row_15.urdf"
 asset_options_robot = gymapi.AssetOptions()
 asset_options_robot.fix_base_link = True
 
-object_root = os.path.join(os.path.expanduser("~"), "TableBot", "urdf")
+object_root = os.path.join(os.path.expanduser("~"), "TableBot", "../urdf")
 object_file = "ball.urdf"
 
 

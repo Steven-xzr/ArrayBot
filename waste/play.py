@@ -9,7 +9,7 @@ import numpy as np
 p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 p.loadURDF("plane.urdf", [0, 0, -0.3], useFixedBase=True)
-robot_id = p.loadURDF("urdf/tablebot_100.urdf", [0, 0, 0], useFixedBase=True)
+robot_id = p.loadURDF("../urdf/tablebot_100.urdf", [0, 0, 0], useFixedBase=True)
 # robot_id = p.loadURDF("urdf/tablebot_unit.urdf", [0, 0, 0], useFixedBase=True)
 p.resetBasePositionAndOrientation(robot_id, [0, 0, 0], [0, 0, 0, 1])
 

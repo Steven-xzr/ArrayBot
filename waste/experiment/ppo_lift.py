@@ -1,10 +1,9 @@
 import hydra
-import numpy as np
 import pfrl
 import torch
 
-from environments import RotateEnv
-from policy.rl_module import PerceptionXYZ8, DeConv8
+from waste.environments import LiftEnv
+from waste.policy.rl_module import PerceptionXYZ8, DeConv8
 from pfrl.policies import SoftmaxCategoricalHead
 
 
@@ -26,9 +25,9 @@ class ActorCritic(torch.nn.Module):
         return tuple([self.head(a_prob), v])
 
 
-@hydra.main(version_base=None, config_path='config', config_name='rotate_block_ppo')
+@hydra.main(version_base=None, config_path='config', config_name='lift_block_ppo_ee')
 def main(cfg):
-    env = RotateEnv(cfg)
+    env = LiftEnv(cfg)
     env.reset()
 
     model = ActorCritic()
@@ -39,7 +38,7 @@ def main(cfg):
         opt,
         gpu=0,
         update_interval=128,
-        phi=lambda x: (x['object_orientation'], x['joint_position']),
+        phi=lambda x: (x['object_position'], x['joint_position']),
     )
 
     n_episodes = 300

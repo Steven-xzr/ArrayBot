@@ -1,48 +1,44 @@
 import hydra
-import numpy as np
 import pfrl
 import torch
-import torch.nn as nn
 
-from environments import LiftEnv
-from policy.rl_module import PerceptionXYZ8, DeConv8, MultiDiscreteActionValue
+from waste.environments import RotateEnv
+from waste.policy.rl_module import PerceptionXYZ8, DeConv8
+from pfrl.policies import SoftmaxCategoricalHead
 
 
-class QFunction(torch.nn.Module):
+class ActorCritic(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.p_net = PerceptionXYZ8()
-        self.q_net = DeConv8()
+        self.deconv_net = DeConv8()
+        self.v_net = torch.nn.Linear(256, 1)
+        self.head = SoftmaxCategoricalHead()
 
     def forward(self, x):
         object_position = x[0]
         joint_position = x[1]
         state_emb = self.p_net(object_position, joint_position)
-        q = self.q_net(state_emb)   # b x 3 x 8 x 8
-        q = q.reshape(q.shape[0], 3, 8 * 8).permute(0, 2, 1)  # b x 64 x 3
-        return MultiDiscreteActionValue(q)
+        a_prob = self.deconv_net(state_emb)   # b x 3 x 8 x 8
+        a_prob = a_prob.reshape(a_prob.shape[0], 3, 8 * 8).permute(0, 2, 1)  # b x 64 x 3
+        v = self.v_net(state_emb)
+        return tuple([self.head(a_prob), v])
 
 
-@hydra.main(version_base=None, config_path='config', config_name='lift_block_dqn')
+@hydra.main(version_base=None, config_path='config', config_name='rotate_block_ppo')
 def main(cfg):
-    env = LiftEnv(cfg)
+    env = RotateEnv(cfg)
     env.reset()
 
-    q_func = QFunction()
-    opt = torch.optim.Adam(q_func.parameters())
+    model = ActorCritic()
+    opt = torch.optim.Adam(model.parameters())
 
-    agent = pfrl.agents.DoubleDQN(
-        q_func,
+    agent = pfrl.agents.PPO(
+        model,
         opt,
-        gamma=0.99,
-        explorer=pfrl.explorers.ConstantEpsilonGreedy(
-            epsilon=0.3, random_action_func=env.action_space.sample
-        ),
-        replay_buffer=pfrl.replay_buffers.ReplayBuffer(10 ** 6),
         gpu=0,
-        update_interval=1,
-        target_update_interval=100,
-        phi=lambda x: (x['object_position'], x['joint_position']),
+        update_interval=128,
+        phi=lambda x: (x['object_orientation'], x['joint_position']),
     )
 
     n_episodes = 300

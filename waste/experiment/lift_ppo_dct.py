@@ -1,9 +1,8 @@
 import hydra
-import numpy as np
 import pfrl
 import torch
 
-from environments import LiftEnvDCT
+from waste.environments import LiftEnvDCT
 from pfrl.policies import SoftmaxCategoricalHead
 
 

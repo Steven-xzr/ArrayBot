@@ -126,9 +126,11 @@ class ArrayRobot(VecTask):
         self.init_asset_dof_states['pos'][:] = self.dof_middle
 
         object_root = os.path.join(os.path.expanduser("~"), cfg.object.root)
-        object_file = cfg.object.file
-        print("Loading asset '%s' from '%s'" % (object_file, object_root))
-        self.asset_object = self.gym.load_asset(self.sim, object_root, object_file, gymapi.AssetOptions())
+        # object_file = cfg.object.file
+        # print("Loading asset '%s' from '%s'" % (object_file, object_root))
+        # self.asset_object = self.gym.load_asset(self.sim, object_root, object_file, gymapi.AssetOptions())
+        self.asset_ball = self.gym.load_asset(self.sim, object_root, 'ball.urdf', gymapi.AssetOptions())
+        self.asset_cube = self.gym.load_asset(self.sim, object_root, 'box.urdf', gymapi.AssetOptions())
         self.object_half_extend = cfg.object.half_extend
 
     def _create_ground_plane(self):
@@ -184,7 +186,11 @@ class ArrayRobot(VecTask):
             pose_object = gymapi.Transform()
             pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_half_extend + cfg.object.z)
             pose_object.r = gymapi.Quat(0, 0.0, 0.0, 1)
-            object_handle = self.gym.create_actor(env=env, asset=self.asset_object, pose=pose_object,
+            if i < self.num_envs // 2:
+                asset = self.asset_ball
+            else:
+                asset = self.asset_cube
+            object_handle = self.gym.create_actor(env=env, asset=asset, pose=pose_object,
                                                   name="object" + str(i),
                                                   group=i,
                                                   filter=0)
@@ -333,7 +339,7 @@ class ArrayRobot(VecTask):
                                                        / self.robot_row_gap)[:, :2].int()
 
 
-@hydra.main(version_base=None, config_path='config', config_name='test_isaac_vectask')
+@hydra.main(version_base=None, config_path='waste/config', config_name='test_isaac_vectask')
 def main(cfg):
     envs = ArrayRobot(cfg=cfg, rl_device='cuda:0', sim_device='cuda:0', graphics_device_id=0, headless=False)
 

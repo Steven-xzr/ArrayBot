@@ -1,8 +1,7 @@
 import hydra
 import numpy as np
-import os
 
-from environments import LiftEnv
+from waste.environments import LiftEnv
 from stable_baselines3.common.env_checker import check_env
 
 

@@ -17,7 +17,7 @@ from algo.ppo.ppo import PPO
 from array_robot_vectask import ArrayRobot
 
 
-@hydra.main(config_name='train_config', config_path='algo/configs')
+@hydra.main(config_name='test_config', config_path='algo/configs')
 def main(config: DictConfig):
     if config.checkpoint:
         config.checkpoint = to_absolute_path(config.checkpoint)
@@ -35,7 +35,7 @@ def main(config: DictConfig):
         graphics_device_id=config.graphics_device_id,
         headless=config.headless,
         virtual_screen_capture=False,
-        force_render=False,
+        force_render=True,
     )
 
     minibatch_size = config.train.ppo.horizon_length * config.num_envs
@@ -45,25 +45,9 @@ def main(config: DictConfig):
     os.makedirs(output_dif, exist_ok=True)
 
     agent = PPO(env, output_dif, full_config=config)
-    if config.test:
-        if config.checkpoint:
-            agent.restore_test(config.checkpoint)
-        agent.test()
-    else:
-        # connect to wandb
-        wandb.init(
-            project=config.wandb_project,
-            entity=config.wandb_entity,
-            name=config.output_name,
-            config=omegaconf_to_dict(config),
-            mode=config.wandb_mode
-        )
-
-        agent.restore_train(config.checkpoint)
-        agent.train()
-
-        # close wandb
-        wandb.finish()
+    if config.checkpoint:
+        agent.restore_test(config.checkpoint)
+    agent.test()
 
 
 if __name__ == '__main__':

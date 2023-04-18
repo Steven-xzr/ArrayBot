@@ -1,7 +1,7 @@
 import hydra
 
-from environments import LiftEnv
-from policy.hand_crafted import HandCraftedAgent
+from waste.environments import LiftEnv
+from waste.policy.hand_crafted import HandCraftedAgent
 
 
 @hydra.main(version_base=None, config_path='config', config_name='lift_block')

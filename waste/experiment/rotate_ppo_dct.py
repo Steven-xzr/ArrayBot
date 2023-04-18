@@ -1,9 +1,8 @@
 import hydra
-import numpy as np
 import pfrl
 import torch
 
-from environments import RotateEnvDCT
+from waste.environments import RotateEnvDCT
 from pfrl.policies import SoftmaxCategoricalHead
 
 
