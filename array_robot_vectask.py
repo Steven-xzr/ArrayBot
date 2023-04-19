@@ -126,12 +126,39 @@ class ArrayRobot(VecTask):
         self.init_asset_dof_states['pos'][:] = self.dof_middle
 
         object_root = os.path.join(os.path.expanduser("~"), cfg.object.root)
+        self.asset_object_list = []
+        asset_options_object = gymapi.AssetOptions()
+        asset_options_object.override_com = True
+        asset_options_object.override_inertia = True
+        asset_options_object.vhacd_enabled = True
         # object_file = cfg.object.file
         # print("Loading asset '%s' from '%s'" % (object_file, object_root))
         # self.asset_object = self.gym.load_asset(self.sim, object_root, object_file, gymapi.AssetOptions())
-        self.asset_ball = self.gym.load_asset(self.sim, object_root, 'ball.urdf', gymapi.AssetOptions())
-        self.asset_cube = self.gym.load_asset(self.sim, object_root, 'box.urdf', gymapi.AssetOptions())
+        # self.asset_ball = self.gym.load_asset(self.sim, object_root, 'ball.urdf', gymapi.AssetOptions())
+        # self.asset_cube = self.gym.load_asset(self.sim, object_root, 'box.urdf', gymapi.AssetOptions())
         self.object_half_extend = cfg.object.half_extend
+        difficulties = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+        for env_idx in range(self.num_envs):
+            # env_idx = 0
+            if 'train' in object_root:
+                difficulty = env_idx // 16
+                complexity = (env_idx - difficulty * 16) // 2
+                idx = env_idx % 2
+                object_file = difficulties[difficulty] + '0' + str(complexity) + '_' + str(idx) + '_rescaled.urdf'
+                if os.path.exists(os.path.join(object_root, object_file)):
+                    print("Loading asset '%s' from '%s'" % (object_file, object_root))
+                    self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
+                else:
+                    print("Target asset not found!")
+                    self.asset_object_list.append(self.asset_object_list[np.random.randint(0, len(self.asset_object_list))])
+            elif 'eval' in object_root:
+                difficulty = env_idx // 4
+                complexity = env_idx % 4
+                object_file = difficulties[difficulty] + str(complexity) + '_rescaled.urdf'
+                print("Loading asset '%s' from '%s'" % (object_file, object_root))
+                self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
+            else:
+                raise NotImplementedError
 
     def _create_ground_plane(self):
         plane_params = gymapi.PlaneParams()
@@ -186,10 +213,7 @@ class ArrayRobot(VecTask):
             pose_object = gymapi.Transform()
             pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_half_extend + cfg.object.z)
             pose_object.r = gymapi.Quat(0, 0.0, 0.0, 1)
-            if i < self.num_envs // 2:
-                asset = self.asset_ball
-            else:
-                asset = self.asset_cube
+            asset = self.asset_object_list[i]
             object_handle = self.gym.create_actor(env=env, asset=asset, pose=pose_object,
                                                   name="object" + str(i),
                                                   group=i,
@@ -260,14 +284,14 @@ class ArrayRobot(VecTask):
     def reset_idx(self, env_ids):
         # xyz_dist = Exponential(torch.tensor([5.0, 5.0, 5.0]))
         if not self.fixed_init:
-            end_pos = torch.tensor([self.goal_pos[0] * 0.8, self.goal_pos[1] * 0.8, self.object_base_pos[2] * 1.1])
+            end_pos = torch.tensor([self.goal_pos[0] * 0.8, self.goal_pos[1] * 0.8, self.object_base_pos[2] * 1.01])
             xyz_dist = torch.distributions.uniform.Uniform(self.object_base_pos, end_pos)
-            object_pos = xyz_dist.sample((len(env_ids),)) * (self.goal_pos - self.object_base_pos) + self.object_base_pos
+            object_pos = xyz_dist.sample((len(env_ids),))
 
         # reset root state for robots and objects in selected envs
         self.root_states[env_ids] = self.initial_root_states[env_ids]
         if not self.fixed_init:
-            self.object_positions[env_ids][0:2] = object_pos[0:2]   # Note: z has to be high enough to avoid collision
+            self.root_states[env_ids, -1, 0:2] = object_pos[:, 0:2]   # Note: z has to be high enough to avoid collision
         actor_indices = self.all_actor_indices[env_ids].flatten()
         self.gym.set_actor_root_state_tensor_indexed(self.sim, self.root_tensor, gymtorch.unwrap_tensor(actor_indices),
                                                      len(actor_indices))
