@@ -17,10 +17,10 @@ class ArrayRobot(VecTask):
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless,
                  virtual_screen_capture=False, force_render=False):
         self.cfg = OmegaConf.create(cfg)
-        self.ori_obs = self.cfg.ori_obs
-        cfg["env"]["numObservations"] = 16 if self.ori_obs else 12
+        # self.ori_obs = self.cfg.ori_obs
+        cfg["env"]["numObservations"] = 9 + 6
         # cfg["env"]["numObservations"] = 12 - 3
-        self.fixed_init = self.cfg.fixed_init
+        # self.fixed_init = self.cfg.fixed_init
         super().__init__(config=cfg, rl_device=rl_device, sim_device=sim_device,
                          graphics_device_id=graphics_device_id, headless=headless,
                          virtual_screen_capture=virtual_screen_capture, force_render=force_render)
@@ -35,7 +35,7 @@ class ArrayRobot(VecTask):
 
         # set goal
         # TODO: set goals for orientations
-        self.goal_pos = torch.tensor(self.cfg.goal.pos, device=self.device)  # (3,)
+        # self.goal_pos = torch.tensor(self.cfg.goal.pos, device=self.device)  # (3,)
 
         # set reward
         self.trans_diff_factor = self.cfg.reward.trans_diff_factor
@@ -49,7 +49,7 @@ class ArrayRobot(VecTask):
         vec_root_tensor = gymtorch.wrap_tensor(self.root_tensor)
         vec_dof_tensor = gymtorch.wrap_tensor(self.dof_state_tensor)
 
-        self.root_states = vec_root_tensor.view(self.num_envs, self.robot_side + 1, 13)
+        self.root_states = vec_root_tensor.view(self.num_envs, self.robot_side + 2, 13)
         self.object_positions = self.root_states[..., -1, 0:3]
         self.object_orientations = self.root_states[..., -1, 3:7]
         self.object_linvels = self.root_states[..., -1, 7:10]
@@ -67,18 +67,18 @@ class ArrayRobot(VecTask):
 
         self.dof_position_targets = torch.zeros((self.num_envs, self.robot_side, self.robot_side), dtype=torch.float32,
                                                 device=self.device, requires_grad=False)
-        self.all_actor_indices = torch.arange(self.num_envs * (self.robot_side + 1),
+        self.all_actor_indices = torch.arange(self.num_envs * (self.robot_side + 2),
                                               dtype=torch.int32,
-                                              device=self.device).view(self.num_envs, self.robot_side + 1)
-        self.all_object_actor_indices = torch.arange(start=self.robot_side,
-                                                     end=self.num_envs * (self.robot_side + 1),
-                                                     step=self.robot_side + 1,
-                                                     dtype=torch.int32,
-                                                     device=self.device).view(self.num_envs, 1)
+                                              device=self.device).view(self.num_envs, self.robot_side + 2)
+        # self.all_object_actor_indices = torch.arange(start=self.robot_side,
+        #                                              end=self.num_envs * (self.robot_side + 1),
+        #                                              step=self.robot_side + 1,
+        #                                              dtype=torch.int32,
+        #                                              device=self.device).view(self.num_envs, 1)
         self.all_robot_actor_indices = []
         for i in range(self.num_envs):
-            self.all_robot_actor_indices.append(torch.arange(start=i * (self.robot_side + 1),
-                                                             end=(i + 1) * (self.robot_side + 1) - 1,
+            self.all_robot_actor_indices.append(torch.arange(start=i * (self.robot_side + 2),
+                                                             end=(i + 1) * (self.robot_side + 2) - 2,
                                                              dtype=torch.int32,
                                                              device=self.device))
         self.all_robot_actor_indices = torch.stack(self.all_robot_actor_indices, dim=0)
@@ -88,6 +88,7 @@ class ArrayRobot(VecTask):
 
     def allocate_buffers(self):
         super().allocate_buffers()
+        self.goal_pos_buf = torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float32)
         self.local_centroid_buf = torch.zeros(self.num_envs, 2, device=self.device, dtype=torch.int32)
         self.translation_diff_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
 
@@ -125,38 +126,60 @@ class ArrayRobot(VecTask):
         self.init_asset_dof_states = np.zeros(self.robot_side, dtype=gymapi.DofState.dtype)
         self.init_asset_dof_states['pos'][:] = self.dof_middle
 
+
+
         object_root = os.path.join(os.path.expanduser("~"), cfg.object.root)
         self.asset_object_list = []
         asset_options_object = gymapi.AssetOptions()
         asset_options_object.override_com = True
         asset_options_object.override_inertia = True
         asset_options_object.vhacd_enabled = True
+
+        self.asset_vis_list = []
+        asset_options_vis = gymapi.AssetOptions()
+        asset_options_vis.disable_gravity = True
+        asset_options_vis.fix_base_link = True
+
         # object_file = cfg.object.file
         # print("Loading asset '%s' from '%s'" % (object_file, object_root))
         # self.asset_object = self.gym.load_asset(self.sim, object_root, object_file, gymapi.AssetOptions())
         # self.asset_ball = self.gym.load_asset(self.sim, object_root, 'ball.urdf', gymapi.AssetOptions())
         # self.asset_cube = self.gym.load_asset(self.sim, object_root, 'box.urdf', gymapi.AssetOptions())
+
         self.object_half_extend = cfg.object.half_extend
         difficulties = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+        slice_object_file = 'X25_1_rescaled.urdf'
+        asset_object = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_object)
+        asset_vis = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_vis)
+
         for env_idx in range(self.num_envs):
+            self.asset_object_list.append(asset_object)
+            self.asset_vis_list.append(asset_vis)
+            continue
+
             # env_idx = 0
             if 'train' in object_root:
                 difficulty = env_idx // 16
                 complexity = (env_idx - difficulty * 16) // 2
                 idx = env_idx % 2
-                object_file = difficulties[difficulty] + '0' + str(complexity) + '_' + str(idx) + '_rescaled.urdf'
+                object_file = difficulties[difficulty] + '0' + str(complexity) + '_' + str(idx) + '_rescaled_4cm.urdf'
                 if os.path.exists(os.path.join(object_root, object_file)):
                     print("Loading asset '%s' from '%s'" % (object_file, object_root))
                     self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
+                    self.asset_vis_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_vis))
                 else:
                     print("Target asset not found!")
-                    self.asset_object_list.append(self.asset_object_list[np.random.randint(0, len(self.asset_object_list))])
+                    asset_idx = np.random.randint(0, len(self.asset_object_list))
+                    self.asset_object_list.append(self.asset_object_list[asset_idx])
+                    self.asset_vis_list.append(self.asset_vis_list[asset_idx])
             elif 'eval' in object_root:
                 difficulty = env_idx // 4
                 complexity = env_idx % 4
-                object_file = difficulties[difficulty] + str(complexity) + '_rescaled.urdf'
+                object_file = difficulties[difficulty] + str(complexity) + '_rescaled_4cm.urdf'
                 print("Loading asset '%s' from '%s'" % (object_file, object_root))
                 self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
+                self.asset_vis_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_vis))
             else:
                 raise NotImplementedError
 
@@ -180,8 +203,10 @@ class ArrayRobot(VecTask):
         self.envs = []
         self.robot_row_handles = []
         self.object_handles = []
+        self.vis_handles = []
         self.object_base_pos = torch.tensor([cfg.object.x, cfg.object.y, cfg.object.z + self.object_half_extend],
                                             device=self.device)
+        self.object_init_z = self.dof_upper_limit + self.object_half_extend + 0.04
 
         print("Creating %d environments." % self.num_envs)
         for i in range(self.num_envs):
@@ -211,15 +236,28 @@ class ArrayRobot(VecTask):
                 self.gym.set_actor_dof_states(env, robot_row_handle, self.init_asset_dof_states, gymapi.STATE_ALL)
 
             pose_object = gymapi.Transform()
-            pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_half_extend + cfg.object.z)
+            pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_init_z)
             pose_object.r = gymapi.Quat(0, 0.0, 0.0, 1)
-            asset = self.asset_object_list[i]
-            object_handle = self.gym.create_actor(env=env, asset=asset, pose=pose_object,
+            color_green = gymapi.Vec3(0.1, 1.0, 0.1)
+
+            # Create goal visualizations
+            asset_vis = self.asset_vis_list[i]
+            vis_handle = self.gym.create_actor(env=env, asset=asset_vis, pose=pose_object,
+                                               name="vis" + str(i),
+                                               group=self.num_envs,
+                                               filter=1)
+            self.gym.set_rigid_body_color(env, vis_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color_green)
+            self.vis_handles.append(vis_handle)
+
+            # Create object
+            asset_object = self.asset_object_list[i]
+            object_handle = self.gym.create_actor(env=env, asset=asset_object, pose=pose_object,
                                                   name="object" + str(i),
                                                   group=i,
                                                   filter=0)
             self.object_handles.append(object_handle)
 
+        # Verify the gaps in row and in column are the same.
         rb_states = self.gym.get_actor_rigid_body_states(self.envs[0], 0, gymapi.STATE_POS)
         self.base_unit_pos = torch.tensor(rb_states[1][0][0].item())  # [3, ]
         next_unit_pos = torch.tensor(rb_states[4][0][0].item())
@@ -242,9 +280,10 @@ class ArrayRobot(VecTask):
         # assert len(self.reset_buf.nonzero().squeeze(-1)) == 0
         # object states
         obj_pos = self._normalize_object_position(self.object_positions)  # [num_envs, 3]
-        if self.ori_obs:
-            obj_ori = self.object_orientations  # [num_envs, 4]
-        obj_diff_pos = self._normalize_diff_position(self.object_positions - self.goal_pos)  # [num_envs, 3]
+        # if self.ori_obs:
+        #     obj_ori = self.object_orientations  # [num_envs, 4]
+        goal_pos = self._normalize_object_position(self.goal_pos_buf)
+        obj_diff_pos = self._normalize_diff_position(self.object_positions - self.goal_pos_buf)  # [num_envs, 3]
 
         # robot states
         # TODO: batch local selection
@@ -259,13 +298,13 @@ class ArrayRobot(VecTask):
         robot_dct = self.dct_handler.dct(robot_local)  # [num_envs, dct_handler.n_freq]
 
         # self.obs_buf = torch.cat([obj_pos, obj_ori, obj_diff_pos, robot_dct], dim=-1)
-        self.obs_buf = torch.cat([obj_pos, obj_diff_pos, robot_dct], dim=-1)
+        self.obs_buf = torch.cat([obj_pos, goal_pos, obj_diff_pos, robot_dct], dim=-1)
         # self.obs_buf = torch.cat([obj_pos, robot_dct], dim=-1)
         return self.obs_buf
 
     def compute_reward(self):
         # TODO: check correctness
-        trans_diff = torch.linalg.norm(self.object_positions - self.goal_pos, dim=-1)  # [num_envs]
+        trans_diff = torch.linalg.norm(self.object_positions - self.goal_pos_buf, dim=-1)  # [num_envs]
         bonus = torch.where(trans_diff < torch.tensor([self.reach_threshold] * self.num_envs),
                             torch.tensor([self.reach_bonus] * self.num_envs), torch.tensor([0] * self.num_envs))
         self.rew_buf = (self.translation_diff_buf - trans_diff) * self.trans_delta_diff_factor + bonus
@@ -283,15 +322,23 @@ class ArrayRobot(VecTask):
 
     def reset_idx(self, env_ids):
         # xyz_dist = Exponential(torch.tensor([5.0, 5.0, 5.0]))
-        if not self.fixed_init:
-            end_pos = torch.tensor([self.goal_pos[0] * 0.8, self.goal_pos[1] * 0.8, self.object_base_pos[2] * 1.01])
-            xyz_dist = torch.distributions.uniform.Uniform(self.object_base_pos, end_pos)
-            object_pos = xyz_dist.sample((len(env_ids),))
+        # if not self.fixed_init:
+        #     end_pos = torch.tensor([self.goal_pos[0] * 0.8, self.goal_pos[1] * 0.8, self.object_base_pos[2] * 1.01])
+        #     xyz_dist = torch.distributions.uniform.Uniform(self.object_base_pos, end_pos)
+        #     object_pos = xyz_dist.sample((len(env_ids),))
+
+        low_pos = torch.tensor([self.robot_size * 0.2, self.robot_size * 0.2, self.dof_lower_limit + self.object_half_extend])
+        high_pos = torch.tensor([self.robot_size * 0.8, self.robot_size * 0.8, self.dof_upper_limit + self.object_half_extend])
+        xyz_dist = torch.distributions.uniform.Uniform(low_pos, high_pos)
+        goal_pos = xyz_dist.sample((len(env_ids),)).float()
+        self.goal_pos_buf[env_ids] = goal_pos
+        object_pos = xyz_dist.sample((len(env_ids),)).float()
+        object_pos[:, 2] = self.object_init_z   # Note: z has to be high enough to avoid collision
 
         # reset root state for robots and objects in selected envs
         self.root_states[env_ids] = self.initial_root_states[env_ids]
-        if not self.fixed_init:
-            self.root_states[env_ids, -1, 0:2] = object_pos[:, 0:2]   # Note: z has to be high enough to avoid collision
+        self.root_states[env_ids, -2, 0:3] = goal_pos
+        self.root_states[env_ids, -1, 0:3] = object_pos
         actor_indices = self.all_actor_indices[env_ids].flatten()
         self.gym.set_actor_root_state_tensor_indexed(self.sim, self.root_tensor, gymtorch.unwrap_tensor(actor_indices),
                                                      len(actor_indices))
@@ -307,7 +354,7 @@ class ArrayRobot(VecTask):
 
         # reset object centroid & translation diff buffer
         self._update_centroids(env_ids)
-        self.translation_diff_buf[env_ids] = torch.linalg.norm(self.object_positions[env_ids] - self.goal_pos, dim=-1)
+        self.translation_diff_buf[env_ids] = torch.linalg.norm(self.object_positions[env_ids] - self.goal_pos_buf[env_ids], dim=-1)
 
     def pre_physics_step(self, _actions):
         # resets
