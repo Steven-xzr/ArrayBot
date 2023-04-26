@@ -2,7 +2,7 @@ import os
 from tqdm import tqdm
 
 
-path = 'egad/eval'
+path = 'egad/train'
 
 
 def main():
