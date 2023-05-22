@@ -49,10 +49,10 @@ class ArrayRobot(VecTask):
     def _prepare_tensors(self):
         self.root_tensor = self.gym.acquire_actor_root_state_tensor(self.sim)
         self.dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
-        self.force_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
+        # self.force_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
         vec_root_tensor = gymtorch.wrap_tensor(self.root_tensor)
         vec_dof_tensor = gymtorch.wrap_tensor(self.dof_state_tensor)
-        vec_force_tensor = gymtorch.wrap_tensor(self.force_tensor)
+        # vec_force_tensor = gymtorch.wrap_tensor(self.force_tensor)
 
         num_objects = 2
 
@@ -66,7 +66,7 @@ class ArrayRobot(VecTask):
         self.dof_positions = self.dof_states[..., 0]
         self.dof_velocities = self.dof_states[..., 1]
 
-        self.forces = vec_force_tensor[:, 0:3].view(self.num_envs, self.robot_side, self.robot_side, 3)
+        # self.forces = vec_force_tensor[:, 0:3].view(self.num_envs, self.robot_side, self.robot_side, 3)
 
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_dof_state_tensor(self.sim)
@@ -137,30 +137,30 @@ class ArrayRobot(VecTask):
         self.init_asset_dof_states = np.zeros(self.robot_side, dtype=gymapi.DofState.dtype)
         self.init_asset_dof_states['pos'][:] = self.dof_middle
 
-        # force sensors are installed between the cuboid links and cylinder links
-        rigid_body_count = self.gym.get_asset_rigid_body_count(self.asset_robot)
-        rigid_body_dict = self.gym.get_asset_rigid_body_dict(self.asset_robot)
+        # # force sensors are installed between the cuboid links and cylinder links
+        # rigid_body_count = self.gym.get_asset_rigid_body_count(self.asset_robot)
+        # rigid_body_dict = self.gym.get_asset_rigid_body_dict(self.asset_robot)
+        #
+        # self.x_indices, self.y_indices = torch.meshgrid(torch.arange(self.robot_side), torch.arange(self.robot_side))
 
-        self.x_indices, self.y_indices = torch.meshgrid(torch.arange(self.robot_side), torch.arange(self.robot_side))
+        # self.force_threshold = cfg.force_threshold
+        #
+        # sphere_indices = [3 + i * 3 for i in range(self.robot_side)]
+        # cylinder_indices = [2 + i * 3 for i in range(self.robot_side)]
+        # cuboid_indices = [1 + i * 3 for i in range(self.robot_side)]
 
-        self.force_threshold = cfg.force_threshold
-
-        sphere_indices = [3 + i * 3 for i in range(self.robot_side)]
-        cylinder_indices = [2 + i * 3 for i in range(self.robot_side)]
-        cuboid_indices = [1 + i * 3 for i in range(self.robot_side)]
-
-        sensor_pose = gymapi.Transform(gymapi.Vec3(0, 0, 0))       # TODO: check correctness
-        sensor_props = gymapi.ForceSensorProperties()
-        sensor_props.enable_forward_dynamics_forces = False
-        sensor_props.enable_constraint_solver_forces = True
-        sensor_props.use_world_frame = False
-
-        # for cylinder_index in cylinder_indices:
-        #     self.gym.create_asset_force_sensor(self.asset_robot, cylinder_index, sensor_pose, sensor_props)
-        for sphere_index in sphere_indices:
-            self.gym.create_asset_force_sensor(self.asset_robot, sphere_index, sensor_pose, sensor_props)
-        # for cuboid_index in cuboid_indices:
-        #     self.gym.create_asset_force_sensor(self.asset_robot, cuboid_index, sensor_pose, sensor_props)
+        # sensor_pose = gymapi.Transform(gymapi.Vec3(0, 0, 0))
+        # sensor_props = gymapi.ForceSensorProperties()
+        # sensor_props.enable_forward_dynamics_forces = False
+        # sensor_props.enable_constraint_solver_forces = True
+        # sensor_props.use_world_frame = False
+        #
+        # # for cylinder_index in cylinder_indices:
+        # #     self.gym.create_asset_force_sensor(self.asset_robot, cylinder_index, sensor_pose, sensor_props)
+        # for sphere_index in sphere_indices:
+        #     self.gym.create_asset_force_sensor(self.asset_robot, sphere_index, sensor_pose, sensor_props)
+        # # for cuboid_index in cuboid_indices:
+        # #     self.gym.create_asset_force_sensor(self.asset_robot, cuboid_index, sensor_pose, sensor_props)
 
         # object assets
         object_root = os.path.join(os.path.expanduser("~"), cfg.object.root)
@@ -184,22 +184,22 @@ class ArrayRobot(VecTask):
         self.object_half_extend = cfg.object.half_extend
         difficulties = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-        slice_object_file = 'A00_0_rescaled.urdf'
-        # slice_object_file = 'box.urdf'
-        asset_object = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_object)
-        asset_vis = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_vis)
+        # slice_object_file = 'A00_0_rescaled_4cm.urdf'
+        # # slice_object_file = 'box.urdf'
+        # asset_object = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_object)
+        # asset_vis = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_vis)
 
         for env_idx in range(self.num_envs):
-            self.asset_object_list.append(asset_object)
-            self.asset_vis_list.append(asset_vis)
-            continue
+            # self.asset_object_list.append(asset_object)
+            # self.asset_vis_list.append(asset_vis)
+            # continue
 
             # env_idx = 0
             if 'train' in object_root:
                 difficulty = env_idx // 16
                 complexity = (env_idx - difficulty * 16) // 2
                 idx = env_idx % 2
-                object_file = difficulties[difficulty] + '0' + str(complexity) + '_' + str(idx) + '_rescaled.urdf'
+                object_file = difficulties[difficulty] + '0' + str(complexity) + '_' + str(idx) + '_rescaled_4cm.urdf'
                 if os.path.exists(os.path.join(object_root, object_file)):
                     print("Loading asset '%s' from '%s'" % (object_file, object_root))
                     self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
@@ -212,7 +212,7 @@ class ArrayRobot(VecTask):
             elif 'eval' in object_root:
                 difficulty = env_idx // 4
                 complexity = env_idx % 4
-                object_file = difficulties[difficulty] + str(complexity) + '_rescaled.urdf'
+                object_file = difficulties[difficulty] + str(complexity) + '_rescaled_4cm.urdf'
                 print("Loading asset '%s' from '%s'" % (object_file, object_root))
                 self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
                 self.asset_vis_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_vis))
