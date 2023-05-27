@@ -13,12 +13,12 @@ from torch.distributions.exponential import Exponential
 from dct_transform import BatchDCT
 
 
-class ArrayRobot(VecTask):
+class BaseEnv(VecTask):
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless,
                  virtual_screen_capture=False, force_render=False):
         self.cfg = OmegaConf.create(cfg)
         # self.ori_obs = self.cfg.ori_obs
-        cfg["env"]["numObservations"] = 9 + 6
+        cfg["env"]["numObservations"] = 3
         # cfg["env"]["numObservations"] = 12 - 3
         # self.fixed_init = self.cfg.fixed_init
         super().__init__(config=cfg, rl_device=rl_device, sim_device=sim_device,
