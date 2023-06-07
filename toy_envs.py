@@ -11,6 +11,8 @@ from isaacgymenvs.tasks.base.vec_task import VecTask
 import torch
 from torch.distributions.exponential import Exponential
 from dct_transform import BatchDCT
+from scipy.spatial.transform import Rotation as R
+import torch_dct
 
 
 class BaseEnv(VecTask):
@@ -33,15 +35,15 @@ class BaseEnv(VecTask):
 
         self._prepare_tensors()
 
-        # set goal
-        # TODO: set goals for orientations
-        # self.goal_pos = torch.tensor(self.cfg.goal.pos, device=self.device)  # (3,)
-
-        # set reward
-        self.trans_diff_factor = self.cfg.reward.trans_diff_factor
-        self.trans_delta_diff_factor = self.cfg.reward.trans_delta_diff_factor
-        self.reach_threshold = self.cfg.reward.reach_threshold
-        self.reach_bonus = self.cfg.reward.reach_bonus
+        # # set goal
+        # # TODO: set goals for orientations
+        # # self.goal_pos = torch.tensor(self.cfg.goal.pos, device=self.device)  # (3,)
+        #
+        # # set reward
+        # self.trans_diff_factor = self.cfg.reward.trans_diff_factor
+        # self.trans_delta_diff_factor = self.cfg.reward.trans_delta_diff_factor
+        # self.reach_threshold = self.cfg.reward.reach_threshold
+        # self.reach_bonus = self.cfg.reward.reach_bonus
 
         # reset
         self.reset_idx()
@@ -54,7 +56,7 @@ class BaseEnv(VecTask):
         vec_dof_tensor = gymtorch.wrap_tensor(self.dof_state_tensor)
         # vec_force_tensor = gymtorch.wrap_tensor(self.force_tensor)
 
-        num_objects = 2
+        num_objects = 1
 
         self.root_states = vec_root_tensor.view(self.num_envs, self.robot_side + num_objects, 13)
         self.object_positions_gt = self.root_states[..., -1, 0:3]
@@ -99,9 +101,15 @@ class BaseEnv(VecTask):
     def allocate_buffers(self):
         super().allocate_buffers()
         self.obj_pos_buf = torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float32)
-        self.goal_pos_buf = torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float32)
+        self.obj_height_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+        self.obj_euler_buf = torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float32)
+        self.obj_quat_buf = torch.zeros(self.num_envs, 4, device=self.device, dtype=torch.float32)
+        self.obj_rotvec_buf = torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float32)
+
         self.local_centroid_buf = torch.zeros(self.num_envs, 2, device=self.device, dtype=torch.int32)
-        self.translation_diff_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+        self.height_diff_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+        self.euler_diff_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+        self.ori_diff_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
 
     def create_sim(self):
         self.dt = self.sim_params.dt
@@ -135,89 +143,19 @@ class BaseEnv(VecTask):
         self.dof_range = self.dof_upper_limit - self.dof_lower_limit
 
         self.init_asset_dof_states = np.zeros(self.robot_side, dtype=gymapi.DofState.dtype)
-        self.init_asset_dof_states['pos'][:] = self.dof_middle
-
-        # # force sensors are installed between the cuboid links and cylinder links
-        # rigid_body_count = self.gym.get_asset_rigid_body_count(self.asset_robot)
-        # rigid_body_dict = self.gym.get_asset_rigid_body_dict(self.asset_robot)
-        #
-        # self.x_indices, self.y_indices = torch.meshgrid(torch.arange(self.robot_side), torch.arange(self.robot_side))
-
-        # self.force_threshold = cfg.force_threshold
-        #
-        # sphere_indices = [3 + i * 3 for i in range(self.robot_side)]
-        # cylinder_indices = [2 + i * 3 for i in range(self.robot_side)]
-        # cuboid_indices = [1 + i * 3 for i in range(self.robot_side)]
-
-        # sensor_pose = gymapi.Transform(gymapi.Vec3(0, 0, 0))
-        # sensor_props = gymapi.ForceSensorProperties()
-        # sensor_props.enable_forward_dynamics_forces = False
-        # sensor_props.enable_constraint_solver_forces = True
-        # sensor_props.use_world_frame = False
-        #
-        # # for cylinder_index in cylinder_indices:
-        # #     self.gym.create_asset_force_sensor(self.asset_robot, cylinder_index, sensor_pose, sensor_props)
-        # for sphere_index in sphere_indices:
-        #     self.gym.create_asset_force_sensor(self.asset_robot, sphere_index, sensor_pose, sensor_props)
-        # # for cuboid_index in cuboid_indices:
-        # #     self.gym.create_asset_force_sensor(self.asset_robot, cuboid_index, sensor_pose, sensor_props)
+        # self.init_asset_dof_states['pos'][:] = self.dof_middle
+        self.init_asset_dof_states['pos'][:] = self.dof_lower_limit
 
         # object assets
-        object_root = os.path.join(os.path.expanduser("~"), cfg.object.root)
+        object_root = os.path.join(os.path.expanduser("~"), 'urdf')
         self.asset_object_list = []
         asset_options_object = gymapi.AssetOptions()
         asset_options_object.override_com = True
         asset_options_object.override_inertia = True
         asset_options_object.vhacd_enabled = True
+        self.asset_object = self.gym.load_asset(self.sim, 'urdf', 'box-8cm.urdf', asset_options_object)
 
-        self.asset_vis_list = []
-        asset_options_vis = gymapi.AssetOptions()
-        asset_options_vis.disable_gravity = True
-        asset_options_vis.fix_base_link = True
-
-        # object_file = cfg.object.file
-        # print("Loading asset '%s' from '%s'" % (object_file, object_root))
-        # self.asset_object = self.gym.load_asset(self.sim, object_root, object_file, gymapi.AssetOptions())
-        # self.asset_ball = self.gym.load_asset(self.sim, object_root, 'ball.urdf', gymapi.AssetOptions())
-        # self.asset_cube = self.gym.load_asset(self.sim, object_root, 'box.urdf', gymapi.AssetOptions())
-
-        self.object_half_extend = cfg.object.half_extend
-        difficulties = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-
-        # slice_object_file = 'A00_0_rescaled_4cm.urdf'
-        # # slice_object_file = 'box.urdf'
-        # asset_object = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_object)
-        # asset_vis = self.gym.load_asset(self.sim, object_root, slice_object_file, asset_options_vis)
-
-        for env_idx in range(self.num_envs):
-            # self.asset_object_list.append(asset_object)
-            # self.asset_vis_list.append(asset_vis)
-            # continue
-
-            # env_idx = 0
-            if 'train' in object_root:
-                difficulty = env_idx // 16
-                complexity = (env_idx - difficulty * 16) // 2
-                idx = env_idx % 2
-                object_file = difficulties[difficulty] + '0' + str(complexity) + '_' + str(idx) + '_rescaled_4cm.urdf'
-                if os.path.exists(os.path.join(object_root, object_file)):
-                    print("Loading asset '%s' from '%s'" % (object_file, object_root))
-                    self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
-                    self.asset_vis_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_vis))
-                else:
-                    print("Target asset not found!")
-                    asset_idx = np.random.randint(0, len(self.asset_object_list))
-                    self.asset_object_list.append(self.asset_object_list[asset_idx])
-                    self.asset_vis_list.append(self.asset_vis_list[asset_idx])
-            elif 'eval' in object_root:
-                difficulty = env_idx // 4
-                complexity = env_idx % 4
-                object_file = difficulties[difficulty] + str(complexity) + '_rescaled_4cm.urdf'
-                print("Loading asset '%s' from '%s'" % (object_file, object_root))
-                self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
-                self.asset_vis_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_vis))
-            else:
-                raise NotImplementedError
+        self.object_half_extend = 0.04
 
     def _create_ground_plane(self):
         plane_params = gymapi.PlaneParams()
@@ -243,6 +181,12 @@ class BaseEnv(VecTask):
         self.object_base_pos = torch.tensor([cfg.object.x, cfg.object.y, cfg.object.z + self.object_half_extend],
                                             device=self.device)
         self.object_init_z = self.dof_upper_limit + self.object_half_extend + 0.04
+        self.fixed_object_init_pos = np.array([self.robot_size / 2, self.robot_size / 2, self.object_init_z])
+        self.fixed_object_init_ori = np.array([0, 0, 0, 1])
+
+        self.goal_height = self.dof_upper_limit + self.object_half_extend + 0.04
+        self.goal_euler = torch.tensor([np.pi / 2, 0, 0], device=self.device, dtype=torch.float32)
+        self.goal_ori = R.from_euler('xyz', self.goal_euler)
 
         print("Creating %d environments." % self.num_envs)
         for i in range(self.num_envs):
@@ -272,33 +216,25 @@ class BaseEnv(VecTask):
                 self.gym.set_actor_dof_states(env, robot_row_handle, self.init_asset_dof_states, gymapi.STATE_ALL)
 
             pose_object = gymapi.Transform()
-            pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_init_z)
-            pose_object.r = gymapi.Quat(0, 0.0, 0.0, 1)
-            color_green = gymapi.Vec3(0.1, 1.0, 0.1)
-
-            # Create goal visualizations
-            asset_vis = self.asset_vis_list[i]
-            vis_handle = self.gym.create_actor(env=env, asset=asset_vis, pose=pose_object,
-                                               name="vis" + str(i),
-                                               group=self.num_envs,
-                                               filter=1)
-            self.gym.set_rigid_body_color(env, vis_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color_green)
-            rigid_body_props = self.gym.get_actor_rigid_body_properties(env, vis_handle)
-            rigid_body_props[0].mass = 1e-9
-            self.gym.set_actor_rigid_body_properties(env, vis_handle, rigid_body_props)
-            self.vis_handles.append(vis_handle)
+            # pose_object.p = gymapi.Vec3(self.robot_size / 2, self.robot_size / 2, self.object_init_z)
+            pose_object.p = gymapi.Vec3(self.fixed_object_init_pos[0],
+                                        self.fixed_object_init_pos[1],
+                                        self.fixed_object_init_pos[2])
+            pose_object.r = gymapi.Quat(self.fixed_object_init_ori[0],
+                                        self.fixed_object_init_ori[1],
+                                        self.fixed_object_init_ori[2],
+                                        self.fixed_object_init_ori[3])
 
             # Create object
-            asset_object = self.asset_object_list[i]
-            object_handle = self.gym.create_actor(env=env, asset=asset_object, pose=pose_object,
+            object_handle = self.gym.create_actor(env=env, asset=self.asset_object, pose=pose_object,
                                                   name="object" + str(i),
                                                   group=i,
                                                   filter=0)
             self.object_handles.append(object_handle)
 
-        # Global rigid body ids
-        self.global_vis_id = self.robot_side + self.robot_side ** 2 * 3
-        self.global_obj_id = self.global_vis_id + 1
+        # # Global rigid body ids
+        # self.global_vis_id = self.robot_side + self.robot_side ** 2 * 3
+        # self.global_obj_id = self.global_vis_id + 1
 
         # Verify the gaps in row and in column are the same.
         rb_states = self.gym.get_actor_rigid_body_states(self.envs[0], 0, gymapi.STATE_POS)
@@ -327,69 +263,27 @@ class BaseEnv(VecTask):
         if env_ids is None:
             env_ids = list(range(self.num_envs))
 
-        # Update object position via contact points
-        mean_corr_list = []
-        for env_id in env_ids:
-            contacts = self.gym.get_env_rigid_contacts(self.envs[env_id])
-            if len(contacts) == 0:
-                mean_corr_list.append(torch.tensor([self.robot_size / 2,
-                                                    self.robot_size / 2,
-                                                    self.object_half_extend + self.dof_range / 2]).float())
-                continue
-            contact_points = []
-            for contact in contacts:
-                ee_id = contact["body1"]
-                assert ee_id != self.global_vis_id and ee_id != self.global_obj_id
-                xx = ee_id // (self.robot_side * 3 + 1)
-                yy = (ee_id - xx * (self.robot_side * 3 + 1) - 1) // 3
-                x = xx * self.robot_row_gap + self.base_unit_pos[0]
-                y = yy * self.robot_row_gap + self.base_unit_pos[1]
-                z = self.dof_positions[env_id][xx, yy].float() + self.object_half_extend
-                contact_points.append(torch.tensor([x, y, z]))
-            mean_contact = torch.stack(contact_points).mean(dim=0)
-            mean_corr_list.append(mean_contact)
-        self.obj_pos_buf[env_ids] = torch.stack(mean_corr_list)
-
-        # TODO: add disturbance
-        # disturbance = torch.rand(object_xy.shape) * 0.1 - 0.05
+        self.obj_pos_buf[env_ids] = self.object_positions_gt[env_ids].clone()
+        self.obj_height_buf[env_ids] = self.obj_pos_buf[env_ids, -1].clone()
+        obj_oris = R.from_quat(self.object_orientations[env_ids].clone())
+        self.obj_euler_buf[env_ids] = torch.tensor(obj_oris.as_euler("xyz", degrees=False), dtype=torch.float32)
+        self.obj_quat_buf[env_ids] = self.object_orientations[env_ids].clone()
+        self.obj_rotvec_buf[env_ids] = torch.tensor(obj_oris.as_rotvec(), dtype=torch.float32)
 
         # Update centroids
         self.local_centroid_buf[env_ids] = torch.round((self.obj_pos_buf[env_ids] - self.base_unit_pos)
                                                        / self.robot_row_gap)[:, :2].int()
 
-        # Object states
-        obj_pos = self._normalize_object_position(self.obj_pos_buf[env_ids])  # [num_envs, 3]
-        # if self.ori_obs:
-        #     obj_ori = self.object_orientations  # [num_envs, 4]
-        goal_pos = self._normalize_object_position(self.goal_pos_buf[env_ids])
-        obj_diff_pos = self._normalize_diff_position(self.obj_pos_buf[env_ids] - self.goal_pos_buf[env_ids])  # [num_envs, 3]
-
-        # Robot states
-        local_tensors = []
-        for env_id in env_ids:
-            global_tensor = self.dof_positions[env_id]  # [num_side, num_side]
-            # global_tensor = 2 * (global_tensor - self.dof_range / 2) / self.dof_range
-            # handling out of border
-            x = min(max(self.local_centroid_buf[env_id][0], self.half_dim), self.robot_side - self.half_dim - 1)
-            y = min(max(self.local_centroid_buf[env_id][1], self.half_dim), self.robot_side - self.half_dim - 1)
-            local_tensors.append(
-                global_tensor[x - self.half_dim:x + self.half_dim + 1, y - self.half_dim:y + self.half_dim + 1])
-        robot_local = torch.stack(local_tensors, dim=0)     # [num_envs, local_side, local_side]
-        robot_dct = self.dct_handler.dct(robot_local)  # [num_envs, dct_handler.n_freq]
-
-        self.obs_buf[env_ids] = torch.cat([obj_pos, goal_pos, obj_diff_pos, robot_dct], dim=-1)
-        return self.obs_buf
-
     def compute_reward(self):
-        # TODO: check correctness
-        trans_diff = torch.linalg.norm(self.object_positions_gt - self.goal_pos_buf, dim=-1)  # [num_envs]
-        bonus = torch.where(trans_diff < torch.tensor([self.reach_threshold] * self.num_envs),
-                            torch.tensor([self.reach_bonus] * self.num_envs), torch.tensor([0] * self.num_envs))
-        self.rew_buf = (self.translation_diff_buf - trans_diff) * self.trans_delta_diff_factor + bonus
-        self.translation_diff_buf = trans_diff
+        raise NotImplementedError
+        # # TODO: check correctness
+        # trans_diff = torch.linalg.norm(self.object_positions_gt - self.goal_pos_buf, dim=-1)  # [num_envs]
+        # bonus = torch.where(trans_diff < torch.tensor([self.reach_threshold] * self.num_envs),
+        #                     torch.tensor([self.reach_bonus] * self.num_envs), torch.tensor([0] * self.num_envs))
+        # self.rew_buf = (self.translation_diff_buf - trans_diff) * self.trans_delta_diff_factor + bonus
+        # self.translation_diff_buf = trans_diff
 
     def compute_reset(self):
-        # TODO: check correctness
         timeout = torch.where(self.progress_buf >= torch.tensor([self.max_episode_length] * self.num_envs),
                               torch.ones(self.num_envs), torch.zeros(self.num_envs))
         local_centroids = torch.round((self.object_positions_gt - self.base_unit_pos) / self.robot_row_gap)[:, :2].int()
@@ -407,16 +301,15 @@ class BaseEnv(VecTask):
         low_pos = torch.tensor([self.robot_size * 0.2, self.robot_size * 0.2, self.dof_lower_limit + self.object_half_extend])
         high_pos = torch.tensor([self.robot_size * 0.8, self.robot_size * 0.8, self.dof_upper_limit + self.object_half_extend])
         xyz_dist = torch.distributions.uniform.Uniform(low_pos, high_pos)
-        goal_pos = xyz_dist.sample((len(env_ids),)).float()
-        self.goal_pos_buf[env_ids] = goal_pos
         object_pos = xyz_dist.sample((len(env_ids),)).float()
         object_pos[:, 2] = self.object_init_z   # Note: z has to be high enough to avoid collision
 
         # reset root state for robots and objects in selected envs
         self.root_states[env_ids] = self.initial_root_states[env_ids]
 
-        self.root_states[env_ids, -2, 0:3] = goal_pos
-        self.root_states[env_ids, -1, 0:3] = object_pos
+        # # self.root_states[env_ids, -2, 0:3] = goal_pos
+        # self.root_states[env_ids, -1, 0:3] = self.fixed_object_init_pos
+        # self.root_states[env_ids, -1, 3:7] = self.fixed_object_init_ori
 
         actor_indices = self.all_actor_indices[env_ids].flatten()
         self.gym.set_actor_root_state_tensor_indexed(self.sim, self.root_tensor, gymtorch.unwrap_tensor(actor_indices),
@@ -427,7 +320,7 @@ class BaseEnv(VecTask):
         robot_actor_indices = self.all_robot_actor_indices[env_ids].flatten()
         self.gym.set_dof_state_tensor_indexed(self.sim, self.dof_state_tensor, gymtorch.unwrap_tensor(robot_actor_indices),
                                               len(robot_actor_indices))
-        self.dof_position_targets[env_ids] = self.dof_middle
+        self.dof_position_targets[env_ids] = torch.tensor(self.dof_lower_limit)
 
         self.reset_buf[env_ids] = 0
         self.progress_buf[env_ids] = 0
@@ -437,7 +330,18 @@ class BaseEnv(VecTask):
         self.gym.refresh_dof_state_tensor(self.sim)
         # self.gym.refresh_force_sensor_tensor(self.sim)
         self.compute_observations(env_ids)
-        self.translation_diff_buf[env_ids] = torch.linalg.norm(self.object_positions_gt[env_ids] - self.goal_pos_buf[env_ids], dim=-1)
+        # self.translation_diff_buf[env_ids] = torch.linalg.norm(self.object_positions_gt[env_ids] - self.goal_pos_buf[env_ids], dim=-1)
+        self.height_diff_buf[env_ids] = np.abs(self.dof_lower_limit + self.object_half_extend - self.goal_height)
+        self.euler_diff_buf[env_ids] = torch.linalg.norm(self.obj_euler_buf[env_ids] - self.goal_euler, dim=-1)
+
+        self.obj_height_buf[env_ids] = self.object_positions_gt[env_ids, 2]
+
+        ori = R.from_quat(self.object_orientations[env_ids])
+        ori_diff = ori * R.inv(self.goal_ori)
+        self.ori_diff_buf[env_ids] = torch.linalg.norm(torch.tensor(ori_diff.as_rotvec()), dim=-1).float()
+
+    def action_handler(self, _action):
+        raise NotImplementedError
 
     def pre_physics_step(self, _actions):
         # resets
@@ -446,8 +350,9 @@ class BaseEnv(VecTask):
             self.reset_idx(reset_env_ids)
 
         # transform action on frequencies to DOF shifts
-        actions = _actions.to(self.device)      # [num_envs, dim_freq (6)]
-        local_dof_shifts = self.dct_handler.idct(actions)  # [num_envs, dim_local, dim_local]
+        actions = _actions.to(self.device)      # [num_envs, dim_freq (6 / 25)]
+        # local_dof_shifts = self.dct_handler.idct(actions)  # [num_envs, dim_local, dim_local]
+        local_dof_shifts = self.action_handler(actions)  # [num_envs, dim_local, dim_local]
         # TODO: batch padding
         for env_id, dof_shift in enumerate(local_dof_shifts):
             if env_id not in reset_env_ids:
@@ -458,7 +363,7 @@ class BaseEnv(VecTask):
                 dof_target_local = self.dof_position_targets[env_id][x - self.half_dim:x + self.half_dim + 1,
                                                                      y - self.half_dim:y + self.half_dim + 1]
                 local_target = dof_target_local + dof_shift * self.dt * self.action_speed_scale
-                self.dof_position_targets[env_id] = self.dof_middle
+                self.dof_position_targets[env_id] = torch.tensor(self.dof_lower_limit)
                 self.dof_position_targets[env_id][x - self.half_dim:x + self.half_dim + 1,
                                                   y - self.half_dim:y + self.half_dim + 1] = local_target
 
@@ -467,7 +372,7 @@ class BaseEnv(VecTask):
         self.dof_position_targets = torch.clamp(self.dof_position_targets, self.dof_lower_limit, self.dof_upper_limit)
 
         # reset position targets for reset envs
-        self.dof_position_targets[reset_env_ids] = self.dof_middle
+        self.dof_position_targets[reset_env_ids] = torch.tensor(self.dof_lower_limit)
 
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(self.dof_position_targets))
 
@@ -488,9 +393,104 @@ class BaseEnv(VecTask):
         #     self.reset_idx(reset_env_ids)
 
 
+class Lift(BaseEnv):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless,
+                 virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def compute_reward(self):
+        height_diff = np.abs(self.obj_height_buf - self.goal_height)
+        self.rew_buf = (self.height_diff_buf - height_diff) * 100
+        self.rew_buf = (self.height_diff_buf - height_diff) * 100
+        self.height_diff_buf = height_diff
+
+    def compute_observations(self, env_ids=None):
+        if env_ids is None:
+            env_ids = list(range(self.num_envs))
+        super().compute_observations(env_ids)
+        self.obs_buf[env_ids] = self._normalize_object_position(self.obj_pos_buf[env_ids])
+
+
+class LiftFreq6(Lift):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def action_handler(self, _action):
+        # action: [num_envs, 6]
+        return self.dct_handler.idct(_action)   # [num_envs, 5, 5]
+
+
+class LiftFreq25(Lift):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def action_handler(self, _action):
+        # action: [num_envs, 25]
+        return torch_dct.idct_2d(_action.reshape(_action.shape[0], 5, 5))
+
+
+class LiftSpatial(Lift):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def action_handler(self, _action):
+        # action: [num_envs, 25]
+        return _action.reshape(_action.shape[0], 5, 5)
+
+
+class Tilt(BaseEnv):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless,
+                 virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def compute_reward(self):
+        # euler_diff = torch.linalg.norm(self.obj_euler_buf - self.goal_euler, dim=-1)
+        # self.rew_buf = (self.euler_diff_buf - euler_diff) * 10
+        # self.row_diff_buf = euler_diff
+
+        ori = R.from_quat(self.object_orientations)
+        ori_diff = ori * R.inv(self.goal_ori)
+        ori_diff = torch.linalg.norm(torch.tensor(ori_diff.as_rotvec()), dim=-1).float()
+        self.rew_buf = (self.ori_diff_buf - ori_diff) * 10
+        self.ori_diff_buf = ori_diff
+
+    def compute_observations(self, env_ids=None):
+        if env_ids is None:
+            env_ids = list(range(self.num_envs))
+        super().compute_observations(env_ids)
+        self.obs_buf[env_ids] = self.obj_rotvec_buf[env_ids]
+
+
+class TiltFreq6(Tilt):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def action_handler(self, _action):
+        # action: [num_envs, 6]
+        return self.dct_handler.idct(_action)   # [num_envs, 5, 5]
+
+
+class TiltFreq25(Tilt):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def action_handler(self, _action):
+        # action: [num_envs, 25]
+        return torch_dct.idct_2d(_action.reshape(_action.shape[0], 5, 5))
+
+
+class TiltSpatial(Tilt):
+    def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture=False, force_render=False):
+        super().__init__(cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render)
+
+    def action_handler(self, _action):
+        # action: [num_envs, 25]
+        return _action.reshape(_action.shape[0], 5, 5)
+
+
 @hydra.main(version_base=None, config_path='waste/config', config_name='test_isaac_vectask')
 def main(cfg):
-    envs = ArrayRobot(cfg=cfg, rl_device='cuda:0', sim_device='cuda:0', graphics_device_id=0, headless=False)
+    envs = LiftFreq6(cfg=cfg, rl_device='cuda:0', sim_device='cuda:0', graphics_device_id=0, headless=False)
 
     while True:
         pass
