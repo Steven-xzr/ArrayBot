@@ -14,10 +14,10 @@ from isaacgymenvs.utils.utils import set_np_formatting, set_seed
 
 from algo.ppo.ppo import PPO
 
-from toy_envs import LiftFreq6, TiltFreq6
+from toy_envs import LiftFreq6, TiltFreq6, TiltSpatial
 
 
-@hydra.main(config_name='tilt_freq_6_test', config_path='algo/configs')
+@hydra.main(config_name='flip_spatial_test', config_path='algo/configs')
 def main(config: DictConfig):
     if config.checkpoint:
         config.checkpoint = to_absolute_path(config.checkpoint)
@@ -28,7 +28,7 @@ def main(config: DictConfig):
 
     cprint('Start Building the Environment', 'green', attrs=['bold'])
     # env = isaacgym_task_map[config.task_name](
-    env = TiltFreq6(
+    env = TiltSpatial(
         cfg=omegaconf_to_dict(config.task),
         sim_device=config.sim_device,
         rl_device=config.rl_device,

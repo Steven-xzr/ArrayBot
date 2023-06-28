@@ -16,8 +16,9 @@ from algo.ppo.ppo import PPO
 
 from array_robot_vectask import ArrayRobot
 
+from tqdm import tqdm
 
-@hydra.main(config_name='test_config', config_path='algo/configs')
+@hydra.main(config_name='test_success_rate', config_path='algo/configs')
 def main(config: DictConfig):
     if config.checkpoint:
         config.checkpoint = to_absolute_path(config.checkpoint)
@@ -47,7 +48,31 @@ def main(config: DictConfig):
     agent = PPO(env, output_dif, full_config=config)
     if config.checkpoint:
         agent.restore_test(config.checkpoint)
-    agent.test()
+    # agent.test()
+
+    agent.set_eval()
+    obs_dict = agent.env.reset()
+
+    num_success = torch.zeros(env.num_envs).cuda()
+    num_episode = torch.zeros(env.num_envs).cuda()
+
+    for _ in tqdm(range(5 * 60 * 60)):
+        input_dict = {
+            'obs': agent.running_mean_std(obs_dict['obs']),
+        }
+        mu = agent.model.act_inference(input_dict)
+        mu = torch.clamp(mu, -1.0, 1.0)
+        obs_dict, r, done, info = agent.env.step(mu)
+        info['reward'] = r
+
+        done_idx = torch.where(done == True)[0].cpu()
+        for idx in done_idx:
+            num_episode[idx] += 1
+            if agent.env.reach_buf[idx] >= 5:
+                num_success[idx] += 1
+
+    print(num_success / num_episode)
+
 
 
 if __name__ == '__main__':

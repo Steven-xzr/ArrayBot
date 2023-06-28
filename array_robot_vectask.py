@@ -103,6 +103,8 @@ class ArrayRobot(VecTask):
         self.local_centroid_buf = torch.zeros(self.num_envs, 2, device=self.device, dtype=torch.int32)
         self.translation_diff_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
 
+        self.reach_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float32)
+
     def create_sim(self):
         self.dt = self.sim_params.dt
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -210,8 +212,9 @@ class ArrayRobot(VecTask):
                     self.asset_object_list.append(self.asset_object_list[asset_idx])
                     self.asset_vis_list.append(self.asset_vis_list[asset_idx])
             elif 'eval' in object_root:
-                difficulty = env_idx // 4
-                complexity = env_idx % 4
+                assert self.num_envs == 49
+                difficulty = env_idx // 7
+                complexity = env_idx % 7
                 object_file = difficulties[difficulty] + str(complexity) + '_rescaled_4cm.urdf'
                 print("Loading asset '%s' from '%s'" % (object_file, object_root))
                 self.asset_object_list.append(self.gym.load_asset(self.sim, object_root, object_file, asset_options_object))
@@ -223,7 +226,7 @@ class ArrayRobot(VecTask):
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0.0, 0.0, 1.0)
         plane_params.distance = 0.1
-        self.gym.add_ground(self.sim, plane_params)
+        # self.gym.add_ground(self.sim, plane_params)
 
     def _create_envs(self):
         cfg = self.cfg.env
@@ -234,7 +237,7 @@ class ArrayRobot(VecTask):
         num_envs_per_row = int(np.sqrt(self.num_envs))
         spacing = self.robot_side * self.robot_row_gap
         env_lower = gymapi.Vec3(-spacing / 2, -spacing / 2, -spacing / 2)
-        env_upper = gymapi.Vec3(3 * spacing / 2, 3 * spacing / 2, spacing)
+        env_upper = gymapi.Vec3(1.5 * spacing / 2, 1.5 * spacing / 2, spacing)
 
         self.envs = []
         self.robot_row_handles = []
@@ -274,7 +277,7 @@ class ArrayRobot(VecTask):
             pose_object = gymapi.Transform()
             pose_object.p = gymapi.Vec3(cfg.object.x, cfg.object.y, self.object_init_z)
             pose_object.r = gymapi.Quat(0, 0.0, 0.0, 1)
-            color_green = gymapi.Vec3(0.1, 1.0, 0.1)
+            color_green = gymapi.Vec3(0.3, 1.0, 0.3)
 
             # Create goal visualizations
             asset_vis = self.asset_vis_list[i]
@@ -385,6 +388,8 @@ class ArrayRobot(VecTask):
         trans_diff = torch.linalg.norm(self.object_positions_gt - self.goal_pos_buf, dim=-1)  # [num_envs]
         bonus = torch.where(trans_diff < torch.tensor([self.reach_threshold] * self.num_envs),
                             torch.tensor([self.reach_bonus] * self.num_envs), torch.tensor([0] * self.num_envs))
+        reach = trans_diff < torch.tensor([self.reach_threshold] * self.num_envs)
+        self.reach_buf += reach
         self.rew_buf = (self.translation_diff_buf - trans_diff) * self.trans_delta_diff_factor + bonus
         self.translation_diff_buf = trans_diff
 
@@ -431,6 +436,7 @@ class ArrayRobot(VecTask):
 
         self.reset_buf[env_ids] = 0
         self.progress_buf[env_ids] = 0
+        self.reach_buf[env_ids] = 0
 
         # reset object position, local centroid, observation, & translation diff buffer
         self.gym.refresh_actor_root_state_tensor(self.sim)
