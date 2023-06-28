@@ -1,3 +1,0 @@
-https://github.com/DLR-RM/stable-baselines3/pull/780
-pip install git+https://github.com/carlosluis/stable-baselines3@fix_tests
-sb3 with gym 0.26 support

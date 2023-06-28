@@ -14,7 +14,7 @@ from isaacgymenvs.utils.utils import set_np_formatting, set_seed
 
 from algo.ppo.ppo import PPO
 
-from toy_envs import LiftFreq6, TiltFreq6, TiltSpatial
+from lift_tilt_envs import LiftFreq6, TiltFreq6, TiltSpatial
 
 
 @hydra.main(config_name='flip_spatial_test', config_path='algo/configs')

@@ -14,7 +14,7 @@ from isaacgymenvs.utils.utils import set_np_formatting, set_seed
 
 from algo.ppo.ppo import PPO
 
-from array_robot_vectask import ArrayRobot
+from envs import ArrayRobot
 
 
 @hydra.main(config_name='train_config', config_path='algo/configs')
