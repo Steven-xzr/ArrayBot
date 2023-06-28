@@ -1,5 +1,15 @@
-torch
-pybullet
-hydra
-pfrl=0.3.0
-gym=0.22
+========= pip install =======
+numpy
+scipy
+torch==1.13.0
+hydra-core==1.2.0
+gym==0.21.0
+torch-dct
+wandb
+trimesh
+
+
+===== manually install =======
+IsaacGym
+IsaacGymEnvs
+

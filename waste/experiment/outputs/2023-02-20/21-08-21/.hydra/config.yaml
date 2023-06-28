@@ -1,0 +1,60 @@
+tablebot:
+  robot:
+    gui: true
+    plane:
+      path: plane.urdf
+      position:
+      - 0
+      - 0
+      - -0.3
+    tablebot:
+      path: urdf/tablebot_64_ee.urdf
+      position:
+      - 0
+      - 0
+      - 0
+      act_size: 0.016
+      act_gap: 0.001
+      act_margin: 0.01
+      num_joint_per_act: 3
+      dim_active: 5
+  camera:
+    distance: 0.25
+    fov: 60
+    width: 640
+    height: 640
+    near: 0.1
+    far: 1
+dct:
+  order: 4
+  step: 0.5
+object:
+  path: /home/zhengrong/bullet3/build_cmake/examples/pybullet/pybullet_data/duck_vhacd.urdf
+  visual_path: /home/zhengrong/egad/train/I24_3.obj
+  random_position: false
+  position:
+  - 0.15
+  - 0.06
+  - 0.05
+  orientation:
+  - 0
+  - 0
+  - 0
+  scale: 0.001
+  shift: 50
+  mass: 0.1
+  friction:
+    lateral: 0.75
+    spinning: 0.2
+    rolling: 0.2
+reward:
+  regularization: false
+  mode: height
+  coefficient: 2
+goal:
+  x: 0.08
+  'y': 0.08
+  z: 0.03
+  row: 1.57
+  pitch: 0
+  yaw: 2.5

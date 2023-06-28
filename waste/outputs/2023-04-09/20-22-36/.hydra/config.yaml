@@ -1,0 +1,58 @@
+name: ArrayRobot
+num_envs: 4
+dim_obs_obj: 10
+dim_local: 5
+max_episode_steps: 200
+dct:
+  order: 3
+  step: 0.5
+goal:
+  pos:
+  - 0.0
+  - 0.0
+  - 0.0
+  ori:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+reward:
+  trans_diff_factor: 0.1
+  trans_delta_diff_factor: 100
+  reach_threshold: 0.02
+  reach_bonus: 10
+env:
+  robot:
+    row_gap: 0.02
+    velocity: 0.05
+    stiffness: 4000.0
+    damping: 200.0
+    effort: 1000.0
+  object:
+    x: 0.16
+    'y': 0.16
+    z: 0.01
+  assets:
+    robot:
+      root: TableBot/urdf
+      file: tablebot_row_15.urdf
+    object:
+      root: TableBot/urdf
+      file: ball.urdf
+      half_extend: 0.02
+sim:
+  headless: false
+  dt: 0.05
+  substeps: 2
+  use_gpu_pipeline: false
+  sim_device: cuda:0
+  control_freq: 5
+  physx:
+    num_threads: 1
+    solver_type: 1
+    num_position_iterations: 8
+    num_velocity_iterations: 0
+    contact_offset: 0.02
+    rest_offset: 0.001
+task:
+  randomize: false
