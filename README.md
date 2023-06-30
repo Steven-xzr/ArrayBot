@@ -1,3 +1,3 @@
 # ArrayBot
 
-The code is currently under construction.
+The README doc is currently under construction.
